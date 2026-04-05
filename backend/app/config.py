@@ -19,6 +19,7 @@ class Config:
     LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
 
     STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
     STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")

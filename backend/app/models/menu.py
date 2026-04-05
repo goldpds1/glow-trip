@@ -13,6 +13,7 @@ class Menu(db.Model):
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Integer, nullable=False)
     duration = db.Column(db.Integer, nullable=False)
+    image_url = db.Column(db.String(500), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(
         db.DateTime(timezone=True),

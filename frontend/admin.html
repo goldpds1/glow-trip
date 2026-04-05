@@ -8,14 +8,20 @@
   <style>
     body { max-width: 100%; width: 100%; padding-bottom: 24px; }
     .header { max-width: 100%; }
-    .stat-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .stat-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
     table { width:100%; border-collapse:collapse; font-size:14px; }
     th, td { padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
     th { background:var(--bg); font-weight:600; font-size:12px; color:var(--text-light); text-transform:uppercase; position:sticky; top:0; }
-    .tab-bar { display:flex; border-bottom:1px solid var(--border); margin:0 16px; }
-    .tab-bar a { flex:1; text-align:center; padding:12px; font-size:14px; font-weight:500; color:var(--text-light); cursor:pointer; border-bottom:2px solid transparent; }
+    .tab-bar { display:flex; border-bottom:1px solid var(--border); margin:0 16px; overflow-x:auto; }
+    .tab-bar a { flex:1; text-align:center; padding:12px; font-size:14px; font-weight:500; color:var(--text-light); cursor:pointer; border-bottom:2px solid transparent; min-width:80px; }
     .tab-bar a.active { color:var(--primary); border-bottom-color:var(--primary); }
     .table-wrap { overflow-x:auto; }
+    .filter-bar { display:flex; gap:8px; padding:12px 16px; flex-wrap:wrap; align-items:center; }
+    .filter-bar select, .filter-bar input { padding:6px 10px; border:1px solid var(--border); border-radius:6px; font-size:13px; }
+    .action-btn { padding:4px 10px; font-size:12px; border-radius:4px; cursor:pointer; border:1px solid var(--border); background:#fff; }
+    .action-btn:hover { background:var(--bg); }
+    .action-btn.danger { color:var(--danger); border-color:var(--danger); }
+    .action-btn.primary { color:var(--primary); border-color:var(--primary); }
     @media (max-width: 600px) {
       th, td { padding:8px; font-size:13px; }
       .stat-grid { grid-template-columns: 1fr 1fr; }
@@ -27,8 +33,8 @@
   <div class="header">
     <h1>Admin Panel</h1>
     <div style="display:flex;gap:12px;align-items:center">
-      <a href="/" style="font-size:13px">앱으로 이동</a>
-      <button onclick="adminLogout()" style="font-size:13px;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 12px;cursor:pointer;color:var(--danger)">로그아웃</button>
+      <a href="/" style="font-size:13px">Back to App</a>
+      <button onclick="adminLogout()" style="font-size:13px;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 12px;cursor:pointer;color:var(--danger)">Logout</button>
     </div>
   </div>
 
@@ -47,30 +53,106 @@
 
   <!-- Dashboard -->
   <div id="adminDash" class="hidden">
-    <div class="stat-grid">
+    <!-- Stats -->
+    <div class="stat-grid" id="statsGrid">
+      <div class="stat-card"><div class="stat-value" id="statUsers">-</div><div class="stat-label">Users</div></div>
       <div class="stat-card"><div class="stat-value" id="statShops">-</div><div class="stat-label">Shops</div></div>
       <div class="stat-card"><div class="stat-value" id="statBookings">-</div><div class="stat-label">Bookings</div></div>
+      <div class="stat-card"><div class="stat-value" id="statReviews">-</div><div class="stat-label">Reviews</div></div>
+      <div class="stat-card"><div class="stat-value" id="statRevenue">-</div><div class="stat-label">Revenue</div></div>
     </div>
 
+    <!-- Tabs -->
     <div class="tab-bar">
-      <a class="active" onclick="switchTab('shops',this)">Shops</a>
-      <a onclick="switchTab('bookings',this)">All Bookings</a>
+      <a class="active" onclick="switchTab('users',this)">Users</a>
+      <a onclick="switchTab('shops',this)">Shops</a>
+      <a onclick="switchTab('bookings',this)">Bookings</a>
+      <a onclick="switchTab('settlements',this)">Settlements</a>
+      <a onclick="switchTab('stats',this)">Stats</a>
     </div>
 
-    <div id="tab-shops" class="mt-8 px-16">
+    <!-- Tab: Users -->
+    <div id="tab-users" class="mt-8 px-16">
+      <div class="filter-bar">
+        <select id="userRoleFilter" onchange="loadAdminUsers()">
+          <option value="">All Roles</option>
+          <option value="customer">Customer</option>
+          <option value="owner">Owner</option>
+          <option value="admin">Admin</option>
+        </select>
+        <input type="text" id="userSearch" placeholder="Search..." oninput="loadAdminUsers()">
+      </div>
       <div class="table-wrap">
-        <table><thead><tr><th>Name</th><th>Owner</th><th>Active</th></tr></thead><tbody id="shopTable"></tbody></table>
+        <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Provider</th><th>Created</th><th>Action</th></tr></thead><tbody id="userTable"></tbody></table>
       </div>
     </div>
-    <div id="tab-bookings" class="hidden mt-8 px-16">
+
+    <!-- Tab: Shops -->
+    <div id="tab-shops" class="hidden mt-8 px-16">
+      <div class="filter-bar">
+        <select id="shopActiveFilter" onchange="loadAdminShops()">
+          <option value="">All</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+        <input type="text" id="shopSearch" placeholder="Search..." oninput="loadAdminShops()">
+      </div>
       <div class="table-wrap">
-        <table><thead><tr><th>Customer</th><th>Shop</th><th>Menu</th><th>Time</th><th>Status</th><th>Payment</th></tr></thead><tbody id="bookingTable"></tbody></table>
+        <table><thead><tr><th>Name</th><th>Owner</th><th>Address</th><th>Status</th><th>Action</th></tr></thead><tbody id="shopTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Tab: Bookings -->
+    <div id="tab-bookings" class="hidden mt-8 px-16">
+      <div class="filter-bar">
+        <select id="bookingStatusFilter" onchange="loadAdminBookings()">
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="noshow">No-show</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Customer</th><th>Shop</th><th>Menu</th><th>Time</th><th>Status</th><th>Payment</th><th>Amount</th><th>Action</th></tr></thead><tbody id="bookingTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Tab: Settlements -->
+    <div id="tab-settlements" class="hidden mt-8 px-16">
+      <div id="settlementSummary" style="padding:12px 0;font-size:14px"></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Shop</th><th>Owner</th><th>Sales</th><th>Fee</th><th>Settlement</th><th>Payments</th></tr></thead><tbody id="settlementTable"></tbody></table>
+      </div>
+    </div>
+
+    <!-- Tab: Stats -->
+    <div id="tab-stats" class="hidden mt-8 px-16">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-body">
+          <h3 style="font-size:16px;margin-bottom:12px">Booking Status</h3>
+          <div id="statusCounts" style="display:flex;flex-wrap:wrap;gap:12px"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-body">
+          <h3 style="font-size:16px;margin-bottom:12px">Last 7 Days Bookings</h3>
+          <div id="dailyChart" style="display:flex;align-items:flex-end;gap:4px;height:120px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <h3 style="font-size:16px;margin-bottom:12px">Popular Shops</h3>
+          <div id="popularShops"></div>
+        </div>
       </div>
     </div>
   </div>
 
   <script src="/static/js/api.js"></script>
   <script>
+    // ── Auth ──────────────────────────────────────────
     async function adminLogin() {
       const email = document.getElementById('adminEmail').value;
       const password = document.getElementById('adminPassword').value;
@@ -84,58 +166,192 @@
       initAdmin();
     }
 
-    async function initAdmin() {
-      document.getElementById('adminAuth').classList.add('hidden');
-      document.getElementById('adminDash').classList.remove('hidden');
-      loadAdminShops();
-      loadAdminBookings();
-    }
-
-    async function loadAdminShops() {
-      const res = await get('/shops?per_page=50');
-      const data = await res.json();
-      document.getElementById('statShops').textContent = data.total;
-      document.getElementById('shopTable').innerHTML = data.shops.map(s => `
-        <tr>
-          <td>${esc(s.name)}</td>
-          <td>${esc(s.address || '-')}</td>
-          <td>Active</td>
-        </tr>
-      `).join('');
-    }
-
-    async function loadAdminBookings() {
-      const res = await get('/bookings?per_page=50');
-      const data = await res.json();
-      document.getElementById('statBookings').textContent = data.total;
-      document.getElementById('bookingTable').innerHTML = data.bookings.map(b => `
-        <tr>
-          <td>${esc(b.shop_name)}</td>
-          <td>${esc(b.menu_title)}</td>
-          <td>-</td>
-          <td>${formatDate(b.booking_time)}</td>
-          <td><span class="booking-status status-${b.status}">${b.status}</span></td>
-          <td>${b.payment_status || '-'}</td>
-        </tr>
-      `).join('');
-    }
-
-    function switchTab(tab, el) {
-      document.querySelectorAll('.tab-bar a').forEach(a => a.classList.remove('active'));
-      el.classList.add('active');
-      document.getElementById('tab-shops').classList.toggle('hidden', tab !== 'shops');
-      document.getElementById('tab-bookings').classList.toggle('hidden', tab !== 'bookings');
-    }
-
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-    function formatDate(iso) { return new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
-
     function adminLogout() {
       clearTokens();
       document.getElementById('adminDash').classList.add('hidden');
       document.getElementById('adminAuth').classList.remove('hidden');
     }
 
+    async function initAdmin() {
+      document.getElementById('adminAuth').classList.add('hidden');
+      document.getElementById('adminDash').classList.remove('hidden');
+      loadAdminStats();
+      loadAdminUsers();
+    }
+
+    // ── Stats ─────────────────────────────────────────
+    async function loadAdminStats() {
+      const res = await get('/admin/stats');
+      if (!res.ok) return;
+      const d = await res.json();
+      document.getElementById('statUsers').textContent = d.total_users;
+      document.getElementById('statShops').textContent = d.total_shops;
+      document.getElementById('statBookings').textContent = d.total_bookings;
+      document.getElementById('statReviews').textContent = d.total_reviews;
+      document.getElementById('statRevenue').textContent = formatPrice(d.total_revenue);
+
+      // Status counts
+      document.getElementById('statusCounts').innerHTML = Object.entries(d.status_counts).map(
+        ([k, v]) => `<div style="text-align:center"><div style="font-size:20px;font-weight:700">${v}</div><div style="font-size:12px;color:var(--text-light)">${k}</div></div>`
+      ).join('');
+
+      // Daily chart
+      const maxCount = Math.max(...d.daily_bookings.map(x => x.count), 1);
+      document.getElementById('dailyChart').innerHTML = d.daily_bookings.map(x => {
+        const h = Math.max((x.count / maxCount) * 100, 4);
+        return `<div style="flex:1;text-align:center">
+          <div style="height:${h}px;background:var(--primary);border-radius:4px 4px 0 0;margin:0 2px"></div>
+          <div style="font-size:10px;color:var(--text-light);margin-top:4px">${x.date.slice(5)}</div>
+          <div style="font-size:11px;font-weight:600">${x.count}</div>
+        </div>`;
+      }).join('');
+
+      // Popular shops
+      document.getElementById('popularShops').innerHTML = d.popular_shops.length
+        ? d.popular_shops.map((s, i) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span>${i + 1}. ${esc(s.name)}</span><span style="color:var(--text-light)">${s.booking_count} bookings</span>
+          </div>`).join('')
+        : '<div style="color:var(--text-light)">No data yet</div>';
+    }
+
+    // ── Users ─────────────────────────────────────────
+    async function loadAdminUsers() {
+      const role = document.getElementById('userRoleFilter').value;
+      const keyword = document.getElementById('userSearch').value.trim();
+      let qs = '?per_page=50';
+      if (role) qs += `&role=${role}`;
+      if (keyword) qs += `&keyword=${encodeURIComponent(keyword)}`;
+      const res = await get('/admin/users' + qs);
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById('userTable').innerHTML = data.users.map(u => `
+        <tr>
+          <td>${esc(u.name || '-')}</td>
+          <td>${esc(u.email)}</td>
+          <td>
+            <select onchange="changeUserRole('${u.id}', this.value)" style="padding:4px;font-size:12px;border-radius:4px;border:1px solid var(--border)">
+              ${['customer','owner','admin'].map(r => `<option value="${r}" ${u.role===r?'selected':''}>${r}</option>`).join('')}
+            </select>
+          </td>
+          <td>${u.auth_provider}</td>
+          <td>${formatDate(u.created_at)}</td>
+          <td></td>
+        </tr>
+      `).join('');
+    }
+
+    async function changeUserRole(userId, newRole) {
+      const res = await patch('/admin/users/' + userId, { role: newRole });
+      if (!res.ok) { alert('Failed'); loadAdminUsers(); }
+    }
+
+    // ── Shops ─────────────────────────────────────────
+    async function loadAdminShops() {
+      const active = document.getElementById('shopActiveFilter').value;
+      const keyword = document.getElementById('shopSearch').value.trim();
+      let qs = '?per_page=50';
+      if (active) qs += `&active=${active}`;
+      if (keyword) qs += `&keyword=${encodeURIComponent(keyword)}`;
+      const res = await get('/admin/shops' + qs);
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById('shopTable').innerHTML = data.shops.map(s => `
+        <tr>
+          <td>${esc(s.name)}</td>
+          <td>${esc(s.owner_name || '-')} (${esc(s.owner_email)})</td>
+          <td>${esc(s.address || '-')}</td>
+          <td><span class="booking-status ${s.is_active ? 'status-confirmed' : 'status-cancelled'}">${s.is_active ? 'Active' : 'Inactive'}</span></td>
+          <td>
+            <button class="action-btn ${s.is_active ? 'danger' : 'primary'}" onclick="toggleShop('${s.id}', ${!s.is_active})">
+              ${s.is_active ? 'Deactivate' : 'Activate'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function toggleShop(shopId, active) {
+      await patch('/admin/shops/' + shopId, { is_active: active });
+      loadAdminShops();
+      loadAdminStats();
+    }
+
+    // ── Bookings ──────────────────────────────────────
+    async function loadAdminBookings() {
+      const status = document.getElementById('bookingStatusFilter').value;
+      let qs = '?per_page=50';
+      if (status) qs += `&status=${status}`;
+      const res = await get('/admin/bookings' + qs);
+      if (!res.ok) return;
+      const data = await res.json();
+      document.getElementById('bookingTable').innerHTML = data.bookings.map(b => `
+        <tr>
+          <td>${esc(b.user_name || '-')} <span style="color:var(--text-light);font-size:12px">${esc(b.user_email)}</span></td>
+          <td>${esc(b.shop_name)}</td>
+          <td>${esc(b.menu_title)}</td>
+          <td>${formatDate(b.booking_time)}</td>
+          <td><span class="booking-status status-${b.status}">${b.status}</span></td>
+          <td>${b.payment_status || '-'}</td>
+          <td>${b.amount ? formatPrice(b.amount) : '-'}</td>
+          <td>
+            ${!['cancelled','completed'].includes(b.status)
+              ? `<button class="action-btn danger" onclick="adminCancelBooking('${b.id}')">Cancel</button>`
+              : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function adminCancelBooking(bookingId) {
+      if (!confirm('Cancel this booking and refund?')) return;
+      const res = await post('/admin/bookings/' + bookingId + '/cancel');
+      if (res.ok) { loadAdminBookings(); loadAdminStats(); }
+      else { const d = await res.json(); alert(d.error || 'Failed'); }
+    }
+
+    // ── Settlements ───────────────────────────────────
+    async function loadAdminSettlements() {
+      const res = await get('/admin/settlements');
+      if (!res.ok) return;
+      const d = await res.json();
+      document.getElementById('settlementSummary').innerHTML = `
+        <strong>Total Sales:</strong> ${formatPrice(d.grand_total_sales)} |
+        <strong>Fee (${(d.fee_rate*100).toFixed(0)}%):</strong> ${formatPrice(d.grand_total_fee)} |
+        <strong>Settlement:</strong> ${formatPrice(d.grand_total_settlement)}
+      `;
+      document.getElementById('settlementTable').innerHTML = d.shops.length
+        ? d.shops.map(s => `
+          <tr>
+            <td>${esc(s.shop_name)}</td>
+            <td>${esc(s.owner_name || '-')}</td>
+            <td>${formatPrice(s.total_sales)}</td>
+            <td>${formatPrice(s.total_fee)}</td>
+            <td>${formatPrice(s.total_settlement)}</td>
+            <td>${s.payment_count}</td>
+          </tr>
+        `).join('')
+        : '<tr><td colspan="6" style="text-align:center;color:var(--text-light)">No settlements yet</td></tr>';
+    }
+
+    // ── Tab switching ─────────────────────────────────
+    function switchTab(tab, el) {
+      document.querySelectorAll('.tab-bar a').forEach(a => a.classList.remove('active'));
+      el.classList.add('active');
+      ['users','shops','bookings','settlements','stats'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+      });
+      if (tab === 'shops') loadAdminShops();
+      if (tab === 'bookings') loadAdminBookings();
+      if (tab === 'settlements') loadAdminSettlements();
+      if (tab === 'stats') loadAdminStats();
+    }
+
+    // ── Helpers ───────────────────────────────────────
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function formatDate(iso) { return new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    function formatPrice(won) { return new Intl.NumberFormat('ko-KR',{style:'currency',currency:'KRW'}).format(won); }
+
+    // ── Init ──────────────────────────────────────────
     if (getToken()) initAdmin();
   </script>
 </body>

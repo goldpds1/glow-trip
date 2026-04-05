@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import Booking, Shop, Menu, Payment
+from app.models import Booking, Shop, Menu, Payment, Review
 from app.auth.decorators import login_required
 from app.services.translator import translate_to_korean
 
@@ -26,6 +26,8 @@ def _booking_to_dict(b, include_translation=False):
         d["request_translated"] = b.request_translated
     if b.payment:
         d["payment_status"] = b.payment.payment_status
+        d["amount"] = b.payment.amount
+    d["has_review"] = Review.query.filter_by(booking_id=b.id).first() is not None
     return d
 
 

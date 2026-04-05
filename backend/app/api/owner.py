@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import Booking, Shop, Payment
+from app.models import Booking, Shop, Menu, Payment
 from app.auth.decorators import role_required
 
 owner_bp = Blueprint("owner", __name__, url_prefix="/api/owner")
@@ -36,6 +36,123 @@ def my_shops():
             for s in shops
         ]
     ), 200
+
+
+# ── 샵 정보 수정 ───────────────────────────────────────
+@owner_bp.route("/shops/<shop_id>", methods=["PATCH"])
+@role_required("owner")
+def update_shop(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Shop not found or not yours"), 404
+
+    data = request.get_json() or {}
+    allowed = ("name", "description", "address", "phone", "image_url")
+    for key in allowed:
+        if key in data:
+            setattr(shop, key, data[key])
+
+    db.session.commit()
+
+    return jsonify(
+        id=str(shop.id),
+        name=shop.name,
+        description=shop.description,
+        address=shop.address,
+        phone=shop.phone,
+        image_url=shop.image_url,
+    ), 200
+
+
+# ── 메뉴 추가 ─────────────────────────────────────────
+@owner_bp.route("/shops/<shop_id>/menus", methods=["POST"])
+@role_required("owner")
+def create_menu(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Shop not found or not yours"), 404
+
+    data = request.get_json() or {}
+    title = data.get("title", "").strip()
+    price = data.get("price")
+    duration = data.get("duration")
+
+    if not title or price is None or duration is None:
+        return jsonify(error="title, price, duration are required"), 400
+
+    menu = Menu(
+        shop_id=shop.id,
+        title=title,
+        description=data.get("description", ""),
+        price=int(price),
+        duration=int(duration),
+        image_url=data.get("image_url"),
+        is_active=True,
+    )
+    db.session.add(menu)
+    db.session.commit()
+
+    return jsonify(
+        id=str(menu.id),
+        title=menu.title,
+        description=menu.description,
+        price=menu.price,
+        duration=menu.duration,
+        image_url=menu.image_url,
+        is_active=menu.is_active,
+    ), 201
+
+
+# ── 메뉴 수정 ─────────────────────────────────────────
+@owner_bp.route("/menus/<menu_id>", methods=["PATCH"])
+@role_required("owner")
+def update_menu(menu_id):
+    menu = Menu.query.get(menu_id)
+    if not menu:
+        return jsonify(error="Menu not found"), 404
+
+    shop = Shop.query.get(menu.shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Not your menu"), 403
+
+    data = request.get_json() or {}
+    allowed = ("title", "description", "price", "duration", "is_active", "image_url")
+    for key in allowed:
+        if key in data:
+            val = data[key]
+            if key in ("price", "duration"):
+                val = int(val)
+            setattr(menu, key, val)
+
+    db.session.commit()
+
+    return jsonify(
+        id=str(menu.id),
+        title=menu.title,
+        description=menu.description,
+        price=menu.price,
+        duration=menu.duration,
+        image_url=menu.image_url,
+        is_active=menu.is_active,
+    ), 200
+
+
+# ── 메뉴 삭제 ─────────────────────────────────────────
+@owner_bp.route("/menus/<menu_id>", methods=["DELETE"])
+@role_required("owner")
+def delete_menu(menu_id):
+    menu = Menu.query.get(menu_id)
+    if not menu:
+        return jsonify(error="Menu not found"), 404
+
+    shop = Shop.query.get(menu.shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Not your menu"), 403
+
+    db.session.delete(menu)
+    db.session.commit()
+
+    return jsonify(message="Menu deleted"), 200
 
 
 # ── 샵 예약 캘린더 (날짜별 조회) ─────────────────────────

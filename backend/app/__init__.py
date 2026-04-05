@@ -34,12 +34,23 @@ def create_app(test_config=None):
     from app.api.bookings import bookings_bp
     from app.api.owner import owner_bp
     from app.api.payments import payments_bp
+    from app.api.upload import upload_bp
+    from app.api.reviews import reviews_bp
+    from app.api.admin import admin_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(shops_bp)
     app.register_blueprint(bookings_bp)
     app.register_blueprint(owner_bp)
     app.register_blueprint(payments_bp)
+    app.register_blueprint(upload_bp)
+    app.register_blueprint(reviews_bp)
+    app.register_blueprint(admin_bp)
+
+    @app.route("/api/config/maps-key")
+    def maps_key():
+        key = app.config.get("GOOGLE_MAPS_API_KEY", "")
+        return jsonify(key=key), 200
 
     @app.route("/health")
     def health():

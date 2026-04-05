@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Glow Trip</title>
+  <meta name="stripe-key" content="">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -100,7 +101,13 @@
       <span class="search-icon">&#128269;</span>
       <input type="text" id="searchInput" data-i18n-placeholder="searchPlaceholder" oninput="searchShops()">
     </div>
+    <div style="display:flex;gap:8px;padding:0 16px 8px;align-items:center">
+      <button class="btn btn-outline btn-sm" id="btnListView" onclick="setShopView('list')" data-i18n="listView"></button>
+      <button class="btn btn-outline btn-sm" id="btnMapView" onclick="setShopView('map')" data-i18n="mapView"></button>
+      <button class="btn btn-outline btn-sm" id="btnSortDistance" onclick="toggleDistanceSort()" data-i18n="sortDefault"></button>
+    </div>
     <div id="shopList"></div>
+    <div id="shopMap" class="hidden" style="height:400px;margin:0 16px;border-radius:12px;overflow:hidden"></div>
   </div>
 
   <!-- ══ Page: Shop Detail ═══════════════════════════ -->
@@ -123,6 +130,20 @@
       </div>
       <button class="btn btn-primary" onclick="createBooking()" data-i18n="bookNow"></button>
       <div id="bookingError" class="hidden" style="color:var(--danger);text-align:center;margin-top:12px;font-size:13px"></div>
+    </div>
+  </div>
+
+  <!-- ══ Page: Payment ════════════════════════════════ -->
+  <div id="page-payment" class="page">
+    <div class="px-16 mt-16">
+      <h2 id="paymentTitle" style="font-size:18px;margin-bottom:4px"></h2>
+      <p id="paymentAmount" class="card-sub mb-16"></p>
+      <div class="form-group">
+        <label data-i18n="cardInfo"></label>
+        <div id="card-element" style="padding:12px;border:1px solid var(--border);border-radius:8px;background:#fff"></div>
+        <div id="card-errors" style="color:var(--danger);font-size:13px;margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" id="payBtn" onclick="submitPayment()" data-i18n="pay"></button>
     </div>
   </div>
 
@@ -158,6 +179,7 @@
     </a>
   </div>
 
+  <script src="https://js.stripe.com/v3/"></script>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/lang.js"></script>
   <script src="/static/js/app.js"></script>

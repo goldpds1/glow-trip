@@ -10,6 +10,7 @@ const ROUTE_MAP = {
   'shops': '/shops',
   'shop-detail': '/shops/detail',
   'booking': '/booking',
+  'payment': '/payment',
   'bookings': '/bookings',
   'mypage': '/mypage',
 };
@@ -50,7 +51,7 @@ function navigate(page, pushState = true) {
     if (navEl) navEl.classList.add('active');
   }
 
-  if (['shop-detail', 'booking'].includes(page)) {
+  if (['shop-detail', 'booking', 'payment'].includes(page)) {
     backBtn.classList.remove('hidden');
   } else {
     backBtn.classList.add('hidden');
@@ -189,17 +190,97 @@ async function socialLogin(provider) {
 
 // ── Shops ───────────────────────────────────────────────
 let searchTimer;
+let shopViewMode = 'list';
+let sortByDistance = false;
+let userLat = null;
+let userLng = null;
+let shopMapInstance = null;
+let shopMapMarkers = [];
+let mapsLoaded = false;
+let cachedShops = [];
+
 function searchShops() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(loadShops, 300);
 }
 
+function setShopView(mode) {
+  shopViewMode = mode;
+  document.getElementById('shopList').classList.toggle('hidden', mode === 'map');
+  document.getElementById('shopMap').classList.toggle('hidden', mode !== 'map');
+  document.getElementById('btnListView').classList.toggle('active', mode === 'list');
+  document.getElementById('btnMapView').classList.toggle('active', mode === 'map');
+  if (mode === 'map') renderShopMap(cachedShops);
+}
+
+function toggleDistanceSort() {
+  sortByDistance = !sortByDistance;
+  document.getElementById('btnSortDistance').textContent = sortByDistance ? t('sortDistance') : t('sortDefault');
+  if (sortByDistance && !userLat) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { userLat = pos.coords.latitude; userLng = pos.coords.longitude; loadShops(); },
+      () => { alert(t('locationPermission')); sortByDistance = false; document.getElementById('btnSortDistance').textContent = t('sortDefault'); }
+    );
+  } else {
+    loadShops();
+  }
+}
+
+async function loadGoogleMaps() {
+  if (mapsLoaded) return;
+  try {
+    const res = await fetch('/api/config/maps-key');
+    const data = await res.json();
+    if (!data.key) return;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${data.key}`;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    mapsLoaded = true;
+  } catch (e) { /* Maps unavailable */ }
+}
+
+function renderShopMap(shops) {
+  if (!mapsLoaded || !window.google?.maps) {
+    document.getElementById('shopMap').innerHTML = `<div class="loading">${t('loadingMap')}</div>`;
+    loadGoogleMaps().then(() => { if (mapsLoaded) renderShopMap(shops); });
+    return;
+  }
+  const mapEl = document.getElementById('shopMap');
+  const center = userLat ? { lat: userLat, lng: userLng } : { lat: 37.5665, lng: 126.978 };
+  if (!shopMapInstance) {
+    shopMapInstance = new google.maps.Map(mapEl, { zoom: 13, center });
+  } else {
+    shopMapInstance.setCenter(center);
+  }
+  shopMapMarkers.forEach(m => m.setMap(null));
+  shopMapMarkers = [];
+  shops.forEach(s => {
+    if (!s.latitude || !s.longitude) return;
+    const marker = new google.maps.Marker({
+      position: { lat: s.latitude, lng: s.longitude },
+      map: shopMapInstance,
+      title: s.name,
+    });
+    marker.addListener('click', () => openShop(s.id));
+    shopMapMarkers.push(marker);
+  });
+}
+
 async function loadShops() {
   const keyword = document.getElementById('searchInput')?.value?.trim() || '';
-  const qs = keyword ? `?keyword=${encodeURIComponent(keyword)}` : '';
+  let qs = keyword ? `?keyword=${encodeURIComponent(keyword)}` : '?';
+  if (sortByDistance && userLat) {
+    qs += `${qs.includes('=') ? '&' : ''}lat=${userLat}&lng=${userLng}&sort=distance`;
+  }
   const res = await get('/shops' + qs);
   const data = await res.json();
   const container = document.getElementById('shopList');
+
+  cachedShops = data.shops;
 
   if (!data.shops.length) {
     container.innerHTML = `<div class="loading">${t('noShops')}</div>`;
@@ -209,15 +290,20 @@ async function loadShops() {
   container.innerHTML = data.shops.map(s => `
     <div class="card" onclick="openShop('${s.id}')">
       <div class="card-body shop-card">
-        <div class="shop-thumb">&#10024;</div>
+        ${s.image_url
+          ? `<img src="${s.image_url}" class="shop-thumb" style="width:64px;height:64px;object-fit:cover;border-radius:8px">`
+          : `<div class="shop-thumb">&#10024;</div>`}
         <div class="shop-info">
           <div class="card-title">${esc(s.name)}</div>
           <div class="card-sub">${esc(s.description || '')}</div>
-          <div class="address">${esc(s.address || '')}</div>
+          <div class="address">${esc(s.address || '')}${s.distance_km != null ? ` · ${s.distance_km}${t('km')}` : ''}</div>
+          ${s.avg_rating ? `<div class="shop-rating" style="color:#f5a623;font-size:13px;margin-top:2px">${'★'.repeat(Math.round(s.avg_rating))}${'☆'.repeat(5 - Math.round(s.avg_rating))} ${s.avg_rating}</div>` : ''}
         </div>
       </div>
     </div>
   `).join('');
+
+  if (shopViewMode === 'map') renderShopMap(data.shops);
 }
 
 async function openShop(id) {
@@ -225,7 +311,9 @@ async function openShop(id) {
   selectedShop = await res.json();
   document.getElementById('headerTitle').textContent = selectedShop.name;
 
+  const hasCoords = selectedShop.latitude && selectedShop.longitude;
   const html = `
+    ${selectedShop.image_url ? `<div style="margin:0 16px"><img src="${selectedShop.image_url}" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px"></div>` : ''}
     <div class="card">
       <div class="card-body">
         <h2 style="font-size:20px;margin-bottom:8px">${esc(selectedShop.name)}</h2>
@@ -234,12 +322,14 @@ async function openShop(id) {
         ${selectedShop.phone ? `<p class="card-sub mt-8">Tel: ${esc(selectedShop.phone)}</p>` : ''}
       </div>
     </div>
+    ${hasCoords ? `<div id="detailMap" style="height:200px;margin:0 16px;border-radius:12px;overflow:hidden"></div>` : ''}
     <div class="card">
       <div class="card-body">
         <h3 style="font-size:16px;margin-bottom:12px">${t('menu')}</h3>
         ${selectedShop.menus.map(m => `
           <div class="menu-item" onclick="selectMenu('${m.id}')">
-            <div>
+            ${m.image_url ? `<img src="${m.image_url}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">` : ''}
+            <div style="flex:1">
               <div class="menu-name">${esc(m.title)}</div>
               <div class="menu-desc">${esc(m.description || '')}</div>
             </div>
@@ -251,9 +341,25 @@ async function openShop(id) {
         `).join('')}
       </div>
     </div>
+    <div class="card">
+      <div class="card-body">
+        <h3 style="font-size:16px;margin-bottom:12px">${t('reviews')}</h3>
+        <div id="shopReviews"><div class="loading">...</div></div>
+      </div>
+    </div>
   `;
   document.getElementById('shopDetail').innerHTML = html;
   navigate('shop-detail');
+  loadShopReviews(id);
+
+  if (hasCoords) {
+    loadGoogleMaps().then(() => {
+      if (!mapsLoaded || !window.google?.maps) return;
+      const pos = { lat: selectedShop.latitude, lng: selectedShop.longitude };
+      const map = new google.maps.Map(document.getElementById('detailMap'), { zoom: 15, center: pos });
+      new google.maps.Marker({ position: pos, map, title: selectedShop.name });
+    });
+  }
 }
 
 function selectMenu(menuId) {
@@ -296,8 +402,13 @@ async function createBooking() {
     return;
   }
 
-  alert(t('bookingSuccess'));
-  navigate('bookings');
+  // If payment exists, go to payment page
+  if (data.payment_status === 'pending' && data.id) {
+    startPayment(data.id, selectedMenu.title, selectedMenu.price);
+  } else {
+    alert(t('bookingSuccess'));
+    navigate('bookings');
+  }
 }
 
 async function loadBookings() {
@@ -320,8 +431,34 @@ async function loadBookings() {
         <div class="card-sub mt-8">${esc(b.menu_title)}</div>
         <div class="card-sub">${formatDate(b.booking_time)}</div>
         ${b.request_original ? `<div class="card-sub mt-8" style="font-style:italic">"${esc(b.request_original)}"</div>` : ''}
-        ${b.status === 'pending' || b.status === 'confirmed' ? `
-          <button class="btn btn-danger btn-sm mt-8" onclick="cancelBooking('${b.id}')">${t('cancel')}</button>
+        <div class="action-btns mt-8">
+          ${b.payment_status === 'pending' && b.status === 'pending' ? `
+            <button class="btn btn-primary btn-sm" onclick="startPayment('${b.id}','${esc(b.menu_title)}',${b.amount || 0})">${t('pay')}</button>
+          ` : ''}
+          ${b.status === 'pending' || b.status === 'confirmed' ? `
+            <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">${t('cancel')}</button>
+          ` : ''}
+          ${b.status === 'completed' && !b.has_review ? `
+            <button class="btn btn-outline btn-sm" onclick="document.getElementById('reviewForm-${b.id}').classList.toggle('hidden')">${t('writeReview')}</button>
+          ` : ''}
+        </div>
+        ${b.status === 'completed' && !b.has_review ? `
+        <div id="reviewForm-${b.id}" class="hidden" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <div class="form-group" style="margin-bottom:8px">
+            <label style="font-size:13px">${t('rating')}</label>
+            <select class="form-input" id="reviewRating-${b.id}" style="padding:6px">
+              <option value="5">★★★★★ (5)</option>
+              <option value="4">★★★★☆ (4)</option>
+              <option value="3">★★★☆☆ (3)</option>
+              <option value="2">★★☆☆☆ (2)</option>
+              <option value="1">★☆☆☆☆ (1)</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <input type="text" class="form-input" id="reviewComment-${b.id}" placeholder="${t('commentPlaceholder')}" style="padding:8px">
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="submitReview('${b.id}')">${t('submitReview')}</button>
+        </div>
         ` : ''}
       </div>
     </div>
@@ -354,6 +491,129 @@ async function loadMyPage() {
     adminLink.classList.remove('hidden');
   } else {
     adminLink.classList.add('hidden');
+  }
+}
+
+// ── Payment (Stripe.js) ────────────────────────────────
+let stripeInstance = null;
+let cardElement = null;
+let currentBookingId = null;
+
+function initStripe() {
+  if (stripeInstance) return;
+  const key = document.querySelector('meta[name="stripe-key"]')?.content || '';
+  if (key && window.Stripe) {
+    stripeInstance = Stripe(key);
+  }
+}
+
+function startPayment(bookingId, menuTitle, amount) {
+  currentBookingId = bookingId;
+  document.getElementById('paymentTitle').textContent = menuTitle;
+  document.getElementById('paymentAmount').textContent = `${t('payAmount')}: ${formatPrice(amount)}`;
+  navigate('payment');
+
+  initStripe();
+  if (!stripeInstance) {
+    document.getElementById('card-errors').textContent = t('stripeNotReady');
+    return;
+  }
+
+  const elements = stripeInstance.elements();
+  if (cardElement) cardElement.destroy();
+  cardElement = elements.create('card', { style: { base: { fontSize: '16px' } } });
+  cardElement.mount('#card-element');
+  cardElement.on('change', (e) => {
+    document.getElementById('card-errors').textContent = e.error ? e.error.message : '';
+  });
+}
+
+async function submitPayment() {
+  if (!stripeInstance || !cardElement) {
+    document.getElementById('card-errors').textContent = t('stripeNotReady');
+    return;
+  }
+
+  const btn = document.getElementById('payBtn');
+  btn.disabled = true;
+  btn.textContent = t('processing');
+
+  try {
+    // Get client_secret from backend
+    const checkoutRes = await post(`/payments/${currentBookingId}/checkout`);
+    const checkoutData = await checkoutRes.json();
+    if (!checkoutRes.ok) {
+      document.getElementById('card-errors').textContent = checkoutData.error || t('paymentFailed');
+      btn.disabled = false;
+      btn.textContent = t('pay');
+      return;
+    }
+
+    // Confirm with Stripe
+    const { error, paymentIntent } = await stripeInstance.confirmCardPayment(
+      checkoutData.client_secret,
+      { payment_method: { card: cardElement } }
+    );
+
+    if (error) {
+      document.getElementById('card-errors').textContent = error.message;
+    } else if (paymentIntent.status === 'requires_capture' || paymentIntent.status === 'succeeded') {
+      alert(t('paymentSuccess'));
+      navigate('bookings');
+      return;
+    }
+  } catch (e) {
+    document.getElementById('card-errors').textContent = t('paymentFailed');
+  }
+
+  btn.disabled = false;
+  btn.textContent = t('pay');
+}
+
+// ── Reviews ────────────────────────────────────────────
+async function loadShopReviews(shopId) {
+  const res = await get(`/shops/${shopId}/reviews`);
+  const data = await res.json();
+  const container = document.getElementById('shopReviews');
+
+  let html = '';
+  if (data.avg_rating) {
+    html += `<div style="margin-bottom:12px;font-size:14px">
+      <span style="color:#f5a623">${'★'.repeat(Math.round(data.avg_rating))}${'☆'.repeat(5 - Math.round(data.avg_rating))}</span>
+      <strong>${data.avg_rating}</strong> (${data.review_count} ${t('reviewCount')})
+    </div>`;
+  }
+  if (!data.reviews.length) {
+    html += `<div style="color:var(--text-light);font-size:13px">${t('noReviews')}</div>`;
+  } else {
+    html += data.reviews.map(r => `
+      <div style="border-top:1px solid var(--border);padding:10px 0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong style="font-size:13px">${esc(r.user_name)}</strong>
+          <span style="color:#f5a623;font-size:13px">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</span>
+        </div>
+        ${r.comment ? `<div style="font-size:13px;margin-top:4px;color:var(--text-light)">${esc(r.comment)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+  container.innerHTML = html;
+}
+
+async function submitReview(bookingId) {
+  const ratingEl = document.getElementById(`reviewRating-${bookingId}`);
+  const commentEl = document.getElementById(`reviewComment-${bookingId}`);
+  const rating = parseInt(ratingEl.value);
+  const comment = commentEl.value.trim();
+
+  if (!rating || rating < 1 || rating > 5) return;
+
+  const res = await post('/reviews', { booking_id: bookingId, rating, comment });
+  if (res.ok) {
+    alert(t('reviewSuccess'));
+    loadBookings();
+  } else {
+    const data = await res.json();
+    alert(data.error || t('reviewFailed'));
   }
 }
 

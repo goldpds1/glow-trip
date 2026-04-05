@@ -49,3 +49,6 @@ async function post(path, body) {
 async function patch(path, body) {
   return request(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
+async function del(path) {
+  return request(path, { method: 'DELETE' });
+}

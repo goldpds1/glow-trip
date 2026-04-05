@@ -24,6 +24,7 @@
     <div style="display:flex;gap:12px;align-items:center">
       <div id="ownerLang"></div>
       <a href="/" style="font-size:13px" id="ownerBackLink">Back to App</a>
+      <button class="btn btn-outline btn-sm" onclick="ownerLogout()" id="ownerLogoutBtn" style="display:none;font-size:12px;padding:6px 12px" data-i18n="logout">Logout</button>
     </div>
   </div>
 
@@ -47,6 +48,8 @@
     <div class="tab-bar">
       <a class="active" onclick="switchTab('calendar',this)" data-i18n="bookings">Bookings</a>
       <a onclick="switchTab('settlement',this)" data-i18n="settlement">Settlement</a>
+      <a onclick="switchTab('shopinfo',this)" data-i18n="shopInfo">Shop Info</a>
+      <a onclick="switchTab('menus',this)" data-i18n="menuManage">Menu Mgmt</a>
     </div>
 
     <!-- Calendar Tab -->
@@ -70,6 +73,70 @@
       <div id="settlementStats"></div>
       <div id="settlementList"></div>
     </div>
+
+    <!-- Shop Info Tab -->
+    <div id="tab-shopinfo" class="hidden">
+      <div class="px-16 mt-16">
+        <div class="form-group">
+          <label id="lbl-shopImage"></label>
+          <div id="shopImagePreview" style="margin-bottom:8px"></div>
+          <input type="file" accept="image/*" id="shopImageFile" onchange="uploadShopImage()" style="font-size:13px">
+        </div>
+        <div class="form-group">
+          <label id="lbl-shopName"></label>
+          <input type="text" class="form-input" id="editShopName">
+        </div>
+        <div class="form-group">
+          <label id="lbl-shopAddr"></label>
+          <input type="text" class="form-input" id="editShopAddress">
+        </div>
+        <div class="form-group">
+          <label id="lbl-shopPhone"></label>
+          <input type="text" class="form-input" id="editShopPhone">
+        </div>
+        <div class="form-group">
+          <label id="lbl-shopDesc"></label>
+          <textarea class="form-input" id="editShopDesc" rows="3"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="saveShopInfo()" id="btnSaveShop"></button>
+      </div>
+    </div>
+
+    <!-- Menu Management Tab -->
+    <div id="tab-menus" class="hidden">
+      <div class="px-16 mt-16">
+        <button class="btn btn-primary" onclick="showAddMenuForm()" id="btnAddMenu"></button>
+      </div>
+      <div id="addMenuForm" class="hidden px-16 mt-8" style="background:var(--bg-secondary);padding:16px;margin:0 16px;border-radius:12px">
+        <div class="form-group">
+          <label id="lbl-menuTitle"></label>
+          <input type="text" class="form-input" id="newMenuTitle">
+        </div>
+        <div class="form-group">
+          <label id="lbl-menuDesc"></label>
+          <input type="text" class="form-input" id="newMenuDesc">
+        </div>
+        <div style="display:flex;gap:8px">
+          <div class="form-group" style="flex:1">
+            <label id="lbl-menuPrice"></label>
+            <input type="number" class="form-input" id="newMenuPrice">
+          </div>
+          <div class="form-group" style="flex:1">
+            <label id="lbl-menuDuration"></label>
+            <input type="number" class="form-input" id="newMenuDuration">
+          </div>
+        </div>
+        <div class="form-group">
+          <label id="lbl-menuImage"></label>
+          <input type="file" accept="image/*" id="newMenuImage" style="font-size:13px">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="addMenu()" id="btnSubmitMenu"></button>
+          <button class="btn btn-outline" onclick="hideAddMenuForm()" data-i18n="cancel">Cancel</button>
+        </div>
+      </div>
+      <div id="menuList" class="mt-8"></div>
+    </div>
   </div>
 
   <script src="/static/js/api.js"></script>
@@ -89,6 +156,7 @@
       const data = await res.json();
       if (!res.ok) return alert(data.error || t('loginFailed'));
       setTokens(data);
+      document.getElementById('ownerLogoutBtn').style.display = '';
       initDashboard();
     }
 
@@ -142,6 +210,7 @@
               </div>
             ` : ''}
           ` : ''}
+          ${b.payment_status ? `<div class="card-sub" style="font-size:12px;color:var(--text-light)">${t('paymentPending')}: ${b.payment_status}</div>` : ''}
           <div class="action-btns">
             ${b.status === 'pending' ? `
               <button class="btn btn-primary btn-sm" onclick="changeStatus('${b.id}','confirmed')">${t('confirm')}</button>
@@ -150,6 +219,9 @@
             ${b.status === 'confirmed' ? `
               <button class="btn btn-primary btn-sm" onclick="changeStatus('${b.id}','completed')">${t('complete')}</button>
               <button class="btn btn-outline btn-sm" onclick="changeStatus('${b.id}','noshow')">${t('noshowBtn')}</button>
+            ` : ''}
+            ${(b.payment_status === 'authorized' || b.payment_status === 'captured') ? `
+              <button class="btn btn-danger btn-sm" onclick="refundBooking('${b.id}')">${t('refund')}</button>
             ` : ''}
           </div>
         </div>
@@ -165,9 +237,12 @@
     function switchTab(tab, el) {
       document.querySelectorAll('.tab-bar a').forEach(a => a.classList.remove('active'));
       el.classList.add('active');
-      document.getElementById('tab-calendar').classList.toggle('hidden', tab !== 'calendar');
-      document.getElementById('tab-settlement').classList.toggle('hidden', tab !== 'settlement');
+      ['calendar','settlement','shopinfo','menus'].forEach(t =>
+        document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab)
+      );
       if (tab === 'settlement') loadSettlement();
+      if (tab === 'shopinfo') loadShopInfo();
+      if (tab === 'menus') loadMenuList();
     }
 
     async function loadSettlement() {
@@ -196,6 +271,194 @@
       `).join('') || `<div class="loading">${t('noSettlements')}</div>`;
     }
 
+    // ── Shop Info ──────────────────────────────────────
+    async function loadShopInfo() {
+      const shop = ownerShops.find(s => s.id === currentShopId);
+      if (!shop) return;
+      const res = await get(`/shops/${currentShopId}`);
+      const data = await res.json();
+      document.getElementById('editShopName').value = data.name || '';
+      document.getElementById('editShopAddress').value = data.address || '';
+      document.getElementById('editShopPhone').value = data.phone || '';
+      document.getElementById('editShopDesc').value = data.description || '';
+      document.getElementById('shopImagePreview').innerHTML = data.image_url
+        ? `<img src="${data.image_url}" style="max-width:200px;border-radius:8px">`
+        : '';
+    }
+
+    async function uploadShopImage() {
+      const file = document.getElementById('shopImageFile').files[0];
+      if (!file) return;
+      const url = await uploadFile(file);
+      if (!url) return;
+      const res = await patch(`/owner/shops/${currentShopId}`, { image_url: url });
+      if (res.ok) loadShopInfo();
+    }
+
+    async function saveShopInfo() {
+      const res = await patch(`/owner/shops/${currentShopId}`, {
+        name: document.getElementById('editShopName').value,
+        address: document.getElementById('editShopAddress').value,
+        phone: document.getElementById('editShopPhone').value,
+        description: document.getElementById('editShopDesc').value,
+      });
+      if (res.ok) {
+        alert(t('saved'));
+        const data = await res.json();
+        const idx = ownerShops.findIndex(s => s.id === currentShopId);
+        if (idx >= 0) ownerShops[idx].name = data.name;
+      } else {
+        const d = await res.json(); alert(d.error || 'Failed');
+      }
+    }
+
+    // ── File Upload Helper ─────────────────────────────
+    async function uploadFile(file) {
+      const form = new FormData();
+      form.append('file', file);
+      const token = getToken();
+      const res = await fetch(API + '/upload', {
+        method: 'POST',
+        headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+        body: form,
+      });
+      if (!res.ok) { alert(t('uploadFailed')); return null; }
+      const data = await res.json();
+      return data.url;
+    }
+
+    // ── Menu Management ──────────────────────────────────
+    async function loadMenuList() {
+      const res = await get(`/shops/${currentShopId}/menus`);
+      const data = await res.json();
+      const container = document.getElementById('menuList');
+      if (!data.menus || !data.menus.length) {
+        container.innerHTML = `<div class="loading">${t('noMenus')}</div>`;
+        return;
+      }
+      container.innerHTML = data.menus.map(m => `
+        <div class="booking-row" id="menu-row-${m.id}">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            ${m.image_url ? `<img src="${m.image_url}" style="width:60px;height:60px;object-fit:cover;border-radius:8px;flex-shrink:0">` : ''}
+            <div style="flex:1">
+              <div class="flex" style="justify-content:space-between;align-items:center">
+                <strong>${esc(m.title)}</strong>
+                <span style="font-size:12px;color:${m.is_active ? 'var(--success)' : 'var(--text-light)'}">${m.is_active ? t('active') : t('inactive')}</span>
+              </div>
+              <div class="card-sub">${esc(m.description || '')}</div>
+              <div class="card-sub">${formatPrice(m.price)} · ${m.duration}${t('min')}</div>
+            </div>
+          </div>
+          <div class="action-btns">
+            <button class="btn btn-outline btn-sm" onclick="editMenu('${m.id}')">${t('edit')}</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteMenu('${m.id}')">${t('delete')}</button>
+          </div>
+          <div id="edit-form-${m.id}" class="hidden mt-8" style="background:var(--bg-secondary);padding:12px;border-radius:8px">
+            <div class="form-group"><input type="text" class="form-input" id="em-title-${m.id}" value="${esc(m.title)}"></div>
+            <div class="form-group"><input type="text" class="form-input" id="em-desc-${m.id}" value="${esc(m.description || '')}"></div>
+            <div style="display:flex;gap:8px">
+              <div class="form-group" style="flex:1"><input type="number" class="form-input" id="em-price-${m.id}" value="${m.price}"></div>
+              <div class="form-group" style="flex:1"><input type="number" class="form-input" id="em-dur-${m.id}" value="${m.duration}"></div>
+            </div>
+            <div class="form-group">
+              <label style="font-size:13px">${t('menuImage')}</label>
+              <input type="file" accept="image/*" id="em-img-${m.id}" style="font-size:13px">
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary btn-sm" onclick="submitEditMenu('${m.id}')">${t('save')}</button>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('edit-form-${m.id}').classList.add('hidden')">${t('cancel')}</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function showAddMenuForm() { document.getElementById('addMenuForm').classList.remove('hidden'); }
+    function hideAddMenuForm() {
+      document.getElementById('addMenuForm').classList.add('hidden');
+      document.getElementById('newMenuTitle').value = '';
+      document.getElementById('newMenuDesc').value = '';
+      document.getElementById('newMenuPrice').value = '';
+      document.getElementById('newMenuDuration').value = '';
+    }
+
+    async function addMenu() {
+      const title = document.getElementById('newMenuTitle').value.trim();
+      const price = document.getElementById('newMenuPrice').value;
+      const duration = document.getElementById('newMenuDuration').value;
+      if (!title || !price || !duration) return alert(t('fillAll'));
+      let image_url = null;
+      const imgFile = document.getElementById('newMenuImage').files[0];
+      if (imgFile) { image_url = await uploadFile(imgFile); if (!image_url) return; }
+      const res = await post(`/owner/shops/${currentShopId}/menus`, {
+        title,
+        description: document.getElementById('newMenuDesc').value,
+        price: Number(price),
+        duration: Number(duration),
+        image_url,
+      });
+      if (res.ok) {
+        alert(t('menuAdded'));
+        hideAddMenuForm();
+        loadMenuList();
+      } else {
+        const d = await res.json(); alert(d.error || 'Failed');
+      }
+    }
+
+    function editMenu(id) {
+      document.getElementById('edit-form-' + id).classList.toggle('hidden');
+    }
+
+    async function submitEditMenu(id) {
+      const body = {
+        title: document.getElementById('em-title-' + id).value,
+        description: document.getElementById('em-desc-' + id).value,
+        price: Number(document.getElementById('em-price-' + id).value),
+        duration: Number(document.getElementById('em-dur-' + id).value),
+      };
+      const imgFile = document.getElementById('em-img-' + id).files[0];
+      if (imgFile) { const url = await uploadFile(imgFile); if (!url) return; body.image_url = url; }
+      const res = await patch(`/owner/menus/${id}`, body);
+      if (res.ok) {
+        alert(t('menuUpdated'));
+        loadMenuList();
+      } else {
+        const d = await res.json(); alert(d.error || 'Failed');
+      }
+    }
+
+    async function deleteMenu(id) {
+      if (!confirm(t('confirmDelete'))) return;
+      const res = await del(`/owner/menus/${id}`);
+      if (res.ok) {
+        alert(t('menuDeleted'));
+        loadMenuList();
+      } else {
+        const d = await res.json(); alert(d.error || 'Failed');
+      }
+    }
+
+    // ── Refund ───────────────────────────────────────────
+    async function refundBooking(bookingId) {
+      if (!confirm(t('confirmRefund'))) return;
+      const res = await post(`/payments/${bookingId}/refund`);
+      if (res.ok) {
+        alert(t('refundSuccess'));
+        loadOwnerBookings();
+      } else {
+        const d = await res.json();
+        alert(d.error || t('refundFailed'));
+      }
+    }
+
+    // ── Logout ───────────────────────────────────────────
+    function ownerLogout() {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      location.reload();
+    }
+
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
     function formatPrice(w) { return new Intl.NumberFormat('ko-KR', {style:'currency',currency:'KRW'}).format(w); }
     function formatDate(iso) { return new Date(iso).toLocaleString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
@@ -205,7 +468,26 @@
     applyI18n();
     document.getElementById('ownerTitle').textContent = t('shopDashboard');
     document.getElementById('ownerBackLink').textContent = t('backToApp');
-    if (getToken()) initDashboard();
+    // Shop info labels
+    document.getElementById('lbl-shopName').textContent = t('shopName');
+    document.getElementById('lbl-shopAddr').textContent = t('shopAddress');
+    document.getElementById('lbl-shopPhone').textContent = t('shopPhone');
+    document.getElementById('lbl-shopDesc').textContent = t('shopDescription');
+    document.getElementById('btnSaveShop').textContent = t('save');
+    // Menu labels
+    document.getElementById('btnAddMenu').textContent = t('addMenu');
+    document.getElementById('lbl-menuTitle').textContent = t('menuTitle');
+    document.getElementById('lbl-menuDesc').textContent = t('menuDesc');
+    document.getElementById('lbl-menuPrice').textContent = t('menuPrice');
+    document.getElementById('lbl-menuDuration').textContent = t('menuDuration');
+    document.getElementById('btnSubmitMenu').textContent = t('addMenu');
+    document.getElementById('lbl-shopImage').textContent = t('shopImage');
+    document.getElementById('lbl-menuImage').textContent = t('menuImage');
+
+    if (getToken()) {
+      document.getElementById('ownerLogoutBtn').style.display = '';
+      initDashboard();
+    }
   </script>
 </body>
 </html>

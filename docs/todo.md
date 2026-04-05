@@ -51,49 +51,49 @@
 
 ## Phase 8: 상점 관리 (샵 수정 + 메뉴 CRUD)
 
-- [ ] 샵 수정 API (PATCH /api/owner/shops/:id — 상호명, 주소, 전화번호, 설명)
-- [ ] 메뉴 추가 API (POST /api/owner/shops/:id/menus)
-- [ ] 메뉴 수정 API (PATCH /api/owner/menus/:id)
-- [ ] 메뉴 삭제 API (DELETE /api/owner/menus/:id)
-- [ ] 상점 대시보드 — 샵 정보 수정 UI
-- [ ] 상점 대시보드 — 메뉴 관리 UI (추가/수정/삭제)
-- [ ] 상점 대시보드 — 로그아웃 버튼 추가
+- [x] 샵 수정 API (PATCH /api/owner/shops/:id — 상호명, 주소, 전화번호, 설명)
+- [x] 메뉴 추가 API (POST /api/owner/shops/:id/menus)
+- [x] 메뉴 수정 API (PATCH /api/owner/menus/:id)
+- [x] 메뉴 삭제 API (DELETE /api/owner/menus/:id)
+- [x] 상점 대시보드 — 샵 정보 수정 UI
+- [x] 상점 대시보드 — 메뉴 관리 UI (추가/수정/삭제)
+- [x] 상점 대시보드 — 로그아웃 버튼 추가
 
 ## Phase 9: 이미지 업로드
 
-- [ ] 이미지 업로드 API (POST /api/upload — S3 또는 로컬 저장)
-- [ ] 샵 대표 이미지 업로드/표시
-- [ ] 메뉴별 이미지 업로드/표시
-- [ ] 고객앱 — 샵 카드/상세에 실제 이미지 표시
+- [x] 이미지 업로드 API (POST /api/upload — 로컬 저장, 5MB 제한)
+- [x] 샵 대표 이미지 업로드/표시
+- [x] 메뉴별 이미지 업로드/표시
+- [x] 고객앱 — 샵 카드/상세에 실제 이미지 표시
 
 ## Phase 10: 결제 UI (Stripe.js)
 
-- [ ] 프론트엔드 Stripe.js 로드 및 카드 입력 UI
-- [ ] 예약 → 결제 → 완료 플로우 연결
-- [ ] 상점 대시보드 — 환불 처리 버튼 추가
+- [x] 프론트엔드 Stripe.js 로드 및 카드 입력 UI
+- [x] 예약 → 결제 → 완료 플로우 연결
+- [x] 상점 대시보드 — 환불 처리 버튼 추가
 
 ## Phase 11: 구글맵 연동
 
-- [ ] Google Maps API 키 설정 및 연동
-- [ ] 샵 상세 — 지도에 위치 표시
-- [ ] 샵 목록 — 지도 뷰 모드 추가
-- [ ] 거리순 정렬/필터
+- [x] Google Maps API 키 설정 및 연동
+- [x] 샵 상세 — 지도에 위치 표시
+- [x] 샵 목록 — 지도 뷰 모드 추가
+- [x] 거리순 정렬/필터
 
 ## Phase 12: 리뷰/평점 시스템
 
-- [ ] reviews 테이블 생성 (user_id, shop_id, booking_id, rating, comment)
-- [ ] 리뷰 작성 API (POST /api/reviews — 완료된 예약만)
-- [ ] 리뷰 조회 API (GET /api/shops/:id/reviews)
-- [ ] 샵 상세 — 평점/리뷰 표시
-- [ ] 샵 목록 — 평균 평점 표시
+- [x] reviews 테이블 생성 (user_id, shop_id, booking_id, rating, comment)
+- [x] 리뷰 작성 API (POST /api/reviews — 완료된 예약만)
+- [x] 리뷰 조회 API (GET /api/shops/:id/reviews)
+- [x] 샵 상세 — 평점/리뷰 표시
+- [x] 샵 목록 — 평균 평점 표시
 
 ## Phase 13: 관리자 기능 확장
 
-- [ ] 사용자 관리 API 및 UI (목록, 역할 변경, 차단)
-- [ ] 샵 승인/관리 API 및 UI (활성/비활성, 입점 승인)
-- [ ] 전체 예약 관리 (상세 조회, 강제 취소/환불)
-- [ ] 전체 정산 관리 (샵별 정산 현황, 수수료 조정)
-- [ ] 통계 대시보드 (매출 그래프, 예약 추이, 인기 샵/메뉴)
+- [x] 사용자 관리 API 및 UI (목록, 역할 변경, 검색/필터)
+- [x] 샵 승인/관리 API 및 UI (활성/비활성 토글, 검색/필터)
+- [x] 전체 예약 관리 (목록 조회, 상태 필터, 강제 취소/환불)
+- [x] 전체 정산 관리 (샵별 정산 현황, 수수료 합계)
+- [x] 통계 대시보드 (매출 합계, 예약 추이 차트, 인기 샵 Top5)
 
 ## Phase 14: 알림 시스템
 
