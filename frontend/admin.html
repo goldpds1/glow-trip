@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glow Trip - Admin</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body { max-width: 100%; width: 100%; padding-bottom: 24px; }
+    .header { max-width: 100%; }
+    .stat-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+    th { background:var(--bg); font-weight:600; font-size:12px; color:var(--text-light); text-transform:uppercase; position:sticky; top:0; }
+    .tab-bar { display:flex; border-bottom:1px solid var(--border); margin:0 16px; }
+    .tab-bar a { flex:1; text-align:center; padding:12px; font-size:14px; font-weight:500; color:var(--text-light); cursor:pointer; border-bottom:2px solid transparent; }
+    .tab-bar a.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .table-wrap { overflow-x:auto; }
+    @media (max-width: 600px) {
+      th, td { padding:8px; font-size:13px; }
+      .stat-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Admin Panel</h1>
+    <div style="display:flex;gap:12px;align-items:center">
+      <a href="/" style="font-size:13px">앱으로 이동</a>
+      <button onclick="adminLogout()" style="font-size:13px;background:none;border:1px solid var(--border);border-radius:6px;padding:4px 12px;cursor:pointer;color:var(--danger)">로그아웃</button>
+    </div>
+  </div>
+
+  <!-- Login -->
+  <div id="adminAuth" class="px-16 mt-16">
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" class="form-input" id="adminEmail" placeholder="admin@glowtrip.com">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" class="form-input" id="adminPassword">
+    </div>
+    <button class="btn btn-primary" onclick="adminLogin()">Login</button>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="adminDash" class="hidden">
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-value" id="statShops">-</div><div class="stat-label">Shops</div></div>
+      <div class="stat-card"><div class="stat-value" id="statBookings">-</div><div class="stat-label">Bookings</div></div>
+    </div>
+
+    <div class="tab-bar">
+      <a class="active" onclick="switchTab('shops',this)">Shops</a>
+      <a onclick="switchTab('bookings',this)">All Bookings</a>
+    </div>
+
+    <div id="tab-shops" class="mt-8 px-16">
+      <div class="table-wrap">
+        <table><thead><tr><th>Name</th><th>Owner</th><th>Active</th></tr></thead><tbody id="shopTable"></tbody></table>
+      </div>
+    </div>
+    <div id="tab-bookings" class="hidden mt-8 px-16">
+      <div class="table-wrap">
+        <table><thead><tr><th>Customer</th><th>Shop</th><th>Menu</th><th>Time</th><th>Status</th><th>Payment</th></tr></thead><tbody id="bookingTable"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/api.js"></script>
+  <script>
+    async function adminLogin() {
+      const email = document.getElementById('adminEmail').value;
+      const password = document.getElementById('adminPassword').value;
+      const res = await fetch(API + '/auth/login', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || 'Login failed');
+      setTokens(data);
+      initAdmin();
+    }
+
+    async function initAdmin() {
+      document.getElementById('adminAuth').classList.add('hidden');
+      document.getElementById('adminDash').classList.remove('hidden');
+      loadAdminShops();
+      loadAdminBookings();
+    }
+
+    async function loadAdminShops() {
+      const res = await get('/shops?per_page=50');
+      const data = await res.json();
+      document.getElementById('statShops').textContent = data.total;
+      document.getElementById('shopTable').innerHTML = data.shops.map(s => `
+        <tr>
+          <td>${esc(s.name)}</td>
+          <td>${esc(s.address || '-')}</td>
+          <td>Active</td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadAdminBookings() {
+      const res = await get('/bookings?per_page=50');
+      const data = await res.json();
+      document.getElementById('statBookings').textContent = data.total;
+      document.getElementById('bookingTable').innerHTML = data.bookings.map(b => `
+        <tr>
+          <td>${esc(b.shop_name)}</td>
+          <td>${esc(b.menu_title)}</td>
+          <td>-</td>
+          <td>${formatDate(b.booking_time)}</td>
+          <td><span class="booking-status status-${b.status}">${b.status}</span></td>
+          <td>${b.payment_status || '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+    function switchTab(tab, el) {
+      document.querySelectorAll('.tab-bar a').forEach(a => a.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('tab-shops').classList.toggle('hidden', tab !== 'shops');
+      document.getElementById('tab-bookings').classList.toggle('hidden', tab !== 'bookings');
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function formatDate(iso) { return new Date(iso).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+
+    function adminLogout() {
+      clearTokens();
+      document.getElementById('adminDash').classList.add('hidden');
+      document.getElementById('adminAuth').classList.remove('hidden');
+    }
+
+    if (getToken()) initAdmin();
+  </script>
+</body>
+</html>

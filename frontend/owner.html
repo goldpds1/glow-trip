@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glow Trip - Shop Dashboard</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body { max-width: 100%; width: 100%; padding-bottom: 24px; }
+    .header { max-width: 100%; }
+    .tab-bar { display:flex; border-bottom:1px solid var(--border); margin:0 16px; }
+    .tab-bar a { flex:1; text-align:center; padding:12px; font-size:14px; font-weight:500; color:var(--text-light); cursor:pointer; border-bottom:2px solid transparent; }
+    .tab-bar a.active { color:var(--primary); border-bottom-color:var(--primary); }
+    .booking-row { padding:14px 16px; border-bottom:1px solid var(--border); }
+    .booking-row:last-child { border-bottom:none; }
+    .action-btns { display:flex; gap:6px; margin-top:8px; }
+    .action-btns button { font-size:12px; padding:6px 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1 id="ownerTitle">Shop Dashboard</h1>
+    <div style="display:flex;gap:12px;align-items:center">
+      <div id="ownerLang"></div>
+      <a href="/" style="font-size:13px" id="ownerBackLink">Back to App</a>
+    </div>
+  </div>
+
+  <!-- Login -->
+  <div id="ownerAuth" class="px-16 mt-16">
+    <div class="form-group">
+      <label data-i18n="email">Email</label>
+      <input type="email" class="form-input" id="ownerEmail" placeholder="owner@email.com">
+    </div>
+    <div class="form-group">
+      <label data-i18n="password">Password</label>
+      <input type="password" class="form-input" id="ownerPassword">
+    </div>
+    <button class="btn btn-primary" onclick="ownerLogin()" data-i18n="login">Login</button>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="ownerDash" class="hidden">
+    <div id="shopSelector" class="px-16 mt-16"></div>
+
+    <div class="tab-bar">
+      <a class="active" onclick="switchTab('calendar',this)" data-i18n="bookings">Bookings</a>
+      <a onclick="switchTab('settlement',this)" data-i18n="settlement">Settlement</a>
+    </div>
+
+    <!-- Calendar Tab -->
+    <div id="tab-calendar">
+      <div class="px-16 mt-8 flex gap-8">
+        <input type="date" class="form-input" id="filterDate" onchange="loadOwnerBookings()" style="flex:1">
+        <select class="form-input" id="filterStatus" onchange="loadOwnerBookings()" style="flex:1">
+          <option value="" data-i18n="all">All</option>
+          <option value="pending" data-i18n="pending">Pending</option>
+          <option value="confirmed" data-i18n="confirmed">Confirmed</option>
+          <option value="completed" data-i18n="completed">Completed</option>
+          <option value="noshow" data-i18n="noshow">No-show</option>
+          <option value="cancelled" data-i18n="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div id="ownerBookings" class="mt-8"></div>
+    </div>
+
+    <!-- Settlement Tab -->
+    <div id="tab-settlement" class="hidden">
+      <div id="settlementStats"></div>
+      <div id="settlementList"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/lang.js"></script>
+  <script>
+    let ownerShops = [];
+    let currentShopId = null;
+
+    async function ownerLogin() {
+      const email = document.getElementById('ownerEmail').value;
+      const password = document.getElementById('ownerPassword').value;
+      const res = await fetch(API + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error || t('loginFailed'));
+      setTokens(data);
+      initDashboard();
+    }
+
+    async function initDashboard() {
+      document.getElementById('ownerAuth').classList.add('hidden');
+      document.getElementById('ownerDash').classList.remove('hidden');
+      const res = await get('/owner/shops');
+      const data = await res.json();
+      ownerShops = data.shops;
+      if (!ownerShops.length) {
+        document.getElementById('shopSelector').innerHTML = `<p>${t('noShopsRegistered')}</p>`;
+        return;
+      }
+      currentShopId = ownerShops[0].id;
+      document.getElementById('shopSelector').innerHTML = ownerShops.length > 1
+        ? `<select class="form-input" onchange="currentShopId=this.value;loadOwnerBookings()">${ownerShops.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select>`
+        : `<h2 style="font-size:18px">${esc(ownerShops[0].name)}</h2>`;
+      document.getElementById('filterDate').value = new Date().toISOString().slice(0, 10);
+      loadOwnerBookings();
+    }
+
+    async function loadOwnerBookings() {
+      const date = document.getElementById('filterDate').value;
+      const status = document.getElementById('filterStatus').value;
+      let qs = `?per_page=50`;
+      if (date) qs += `&date=${date}`;
+      if (status) qs += `&status=${status}`;
+      const res = await get(`/owner/shops/${currentShopId}/bookings${qs}`);
+      const data = await res.json();
+      const container = document.getElementById('ownerBookings');
+
+      if (!data.bookings.length) {
+        container.innerHTML = `<div class="loading">${t('noBookingsOwner')}</div>`;
+        return;
+      }
+
+      container.innerHTML = data.bookings.map(b => `
+        <div class="booking-row">
+          <div class="flex" style="justify-content:space-between;align-items:center">
+            <strong>${esc(b.user_name || b.user_email)}</strong>
+            <span class="booking-status status-${b.status}">${b.status}</span>
+          </div>
+          <div class="card-sub">${esc(b.menu_title)} — ${formatPrice(b.menu_price)}</div>
+          <div class="card-sub">${formatDate(b.booking_time)}</div>
+          ${b.request_original ? `
+            <div class="card-sub mt-8" style="font-style:italic">"${esc(b.request_original)}"</div>
+            ${b.request_translated ? `
+              <div class="translated-box">
+                <div class="label">${t('aiTranslation')}</div>
+                ${esc(b.request_translated)}
+              </div>
+            ` : ''}
+          ` : ''}
+          <div class="action-btns">
+            ${b.status === 'pending' ? `
+              <button class="btn btn-primary btn-sm" onclick="changeStatus('${b.id}','confirmed')">${t('confirm')}</button>
+              <button class="btn btn-danger btn-sm" onclick="changeStatus('${b.id}','cancelled')">${t('cancelBtn')}</button>
+            ` : ''}
+            ${b.status === 'confirmed' ? `
+              <button class="btn btn-primary btn-sm" onclick="changeStatus('${b.id}','completed')">${t('complete')}</button>
+              <button class="btn btn-outline btn-sm" onclick="changeStatus('${b.id}','noshow')">${t('noshowBtn')}</button>
+            ` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function changeStatus(bookingId, status) {
+      const res = await patch(`/owner/bookings/${bookingId}/status`, { status });
+      if (res.ok) loadOwnerBookings();
+      else { const d = await res.json(); alert(d.error || 'Failed'); }
+    }
+
+    function switchTab(tab, el) {
+      document.querySelectorAll('.tab-bar a').forEach(a => a.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('tab-calendar').classList.toggle('hidden', tab !== 'calendar');
+      document.getElementById('tab-settlement').classList.toggle('hidden', tab !== 'settlement');
+      if (tab === 'settlement') loadSettlement();
+    }
+
+    async function loadSettlement() {
+      const res = await get(`/owner/shops/${currentShopId}/settlements`);
+      const data = await res.json();
+      document.getElementById('settlementStats').innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value">${formatPrice(data.total_sales)}</div>
+            <div class="stat-label">${t('totalSales')}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${formatPrice(data.total_settlement)}</div>
+            <div class="stat-label">${t('settlementLabel')} (${(data.fee_rate * 100).toFixed(0)}% ${t('fee')})</div>
+          </div>
+        </div>
+      `;
+      document.getElementById('settlementList').innerHTML = data.items.map(i => `
+        <div class="booking-row">
+          <div class="flex" style="justify-content:space-between">
+            <span>${t('amount')}: ${formatPrice(i.amount)}</span>
+            <span style="color:var(--success)">+${formatPrice(i.settlement)}</span>
+          </div>
+          <div class="card-sub">${t('fee')}: ${formatPrice(i.fee)} | ${i.paid_at ? formatDate(i.paid_at) : '-'}</div>
+        </div>
+      `).join('') || `<div class="loading">${t('noSettlements')}</div>`;
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function formatPrice(w) { return new Intl.NumberFormat('ko-KR', {style:'currency',currency:'KRW'}).format(w); }
+    function formatDate(iso) { return new Date(iso).toLocaleString('en-US',{year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+
+    // Init
+    renderLangSelector('ownerLang');
+    applyI18n();
+    document.getElementById('ownerTitle').textContent = t('shopDashboard');
+    document.getElementById('ownerBackLink').textContent = t('backToApp');
+    if (getToken()) initDashboard();
+  </script>
+</body>
+</html>

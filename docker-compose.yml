@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: glowtrip
+      POSTGRES_PASSWORD: glowtrip
+      POSTGRES_DB: glowtrip
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://glowtrip:glowtrip@db:5432/glowtrip
+      SECRET_KEY: dev-secret-key-change-in-production
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    volumes:
+      - ./backend:/app
+      - ./frontend:/frontend
+
+volumes:
+  pgdata:
