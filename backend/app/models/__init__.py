@@ -4,5 +4,7 @@ from app.models.menu import Menu
 from app.models.booking import Booking
 from app.models.payment import Payment
 from app.models.review import Review
+from app.models.business_hour import BusinessHour
+from app.models.notification import Notification
 
-__all__ = ["User", "Shop", "Menu", "Booking", "Payment", "Review"]
+__all__ = ["User", "Shop", "Menu", "Booking", "Payment", "Review", "BusinessHour", "Notification"]

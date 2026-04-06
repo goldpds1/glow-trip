@@ -18,6 +18,7 @@ from flask import Blueprint, request, jsonify, g, current_app
 from app import db
 from app.models import Booking, Payment
 from app.auth.decorators import login_required, role_required
+from app.services import notification as notif_service
 from app.services.payment import (
     create_payment_intent,
     capture_payment,
@@ -172,6 +173,7 @@ def stripe_webhook():
         payment.payment_status = "authorized"
         payment.booking.status = "confirmed"
         db.session.commit()
+        notif_service.notify_owner(payment.booking, "booking_confirmed")
 
     elif event_type == "payment_intent.succeeded":
         # 매입 완료
@@ -182,10 +184,12 @@ def stripe_webhook():
     elif event_type == "payment_intent.payment_failed":
         payment.payment_status = "failed"
         db.session.commit()
+        notif_service.notify_customer(payment.booking, "payment_failed")
 
     elif event_type == "charge.refunded":
         payment.payment_status = "refunded"
         payment.booking.status = "cancelled"
         db.session.commit()
+        notif_service.notify_customer(payment.booking, "payment_refunded")
 
     return jsonify(received=True), 200

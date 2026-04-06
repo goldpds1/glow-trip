@@ -6,6 +6,7 @@ from app import db
 from app.models import Booking, Shop, Menu, Payment, Review
 from app.auth.decorators import login_required
 from app.services.translator import translate_to_korean
+from app.services import notification as notif_service
 
 bookings_bp = Blueprint("bookings", __name__, url_prefix="/api/bookings")
 
@@ -89,6 +90,8 @@ def create_booking():
     db.session.add(payment)
     db.session.commit()
 
+    notif_service.notify_owner(booking, "booking_created")
+
     return jsonify(
         id=str(booking.id),
         status=booking.status,
@@ -158,5 +161,7 @@ def cancel_booking(booking_id):
     if booking.payment and booking.payment.payment_status in ("authorized", "captured"):
         booking.payment.payment_status = "refunded"
     db.session.commit()
+
+    notif_service.notify_owner(booking, "booking_cancelled")
 
     return jsonify(id=str(booking.id), status=booking.status), 200

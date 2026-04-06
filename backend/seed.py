@@ -76,6 +76,7 @@ with app.app_context():
         latitude=37.4979,
         longitude=127.0276,
         phone="02-1234-5678",
+        category="skincare",
     )
     shop2 = Shop(
         owner_id=owner2.id,
@@ -85,6 +86,7 @@ with app.app_context():
         latitude=37.5563,
         longitude=126.9236,
         phone="02-9876-5432",
+        category="facial",
     )
     db.session.add_all([shop1, shop2])
     db.session.flush()

@@ -1,0 +1,17 @@
+{% extends "email/base.html" %}
+{% block content %}
+{% if lang == 'ko' %}
+<h2>결제에 실패했습니다</h2>
+<p>{{ recipient_name }}님, {{ shop_name }}의 예약에 대한 결제가 실패했습니다. 다시 시도해 주세요.</p>
+{% elif lang == 'ja' %}
+<h2>決済に失敗しました</h2>
+<p>{{ recipient_name }}様、{{ shop_name }}のご予約の決済に失敗しました。もう一度お試しください。</p>
+{% elif lang == 'zh' %}
+<h2>支付失败</h2>
+<p>{{ recipient_name }}，{{ shop_name }}的预约支付失败，请重试。</p>
+{% else %}
+<h2>Payment Failed</h2>
+<p>Hi {{ recipient_name }}, the payment for your booking at {{ shop_name }} has failed. Please try again.</p>
+{% endif %}
+{% include "email/_booking_details.html" %}
+{% endblock %}

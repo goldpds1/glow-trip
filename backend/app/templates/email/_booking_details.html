@@ -1,0 +1,26 @@
+<table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px">
+<tr style="border-bottom:1px solid #EDE9E4">
+  <td style="padding:8px 0;color:#6B6B6B">
+    {% if lang == 'ko' %}샵{% elif lang == 'ja' %}ショップ{% elif lang == 'zh' %}店铺{% else %}Shop{% endif %}
+  </td>
+  <td style="padding:8px 0;text-align:right;font-weight:600">{{ shop_name }}</td>
+</tr>
+<tr style="border-bottom:1px solid #EDE9E4">
+  <td style="padding:8px 0;color:#6B6B6B">
+    {% if lang == 'ko' %}메뉴{% elif lang == 'ja' %}メニュー{% elif lang == 'zh' %}项目{% else %}Service{% endif %}
+  </td>
+  <td style="padding:8px 0;text-align:right;font-weight:600">{{ menu_title }}</td>
+</tr>
+<tr style="border-bottom:1px solid #EDE9E4">
+  <td style="padding:8px 0;color:#6B6B6B">
+    {% if lang == 'ko' %}날짜/시간{% elif lang == 'ja' %}日時{% elif lang == 'zh' %}日期/时间{% else %}Date/Time{% endif %}
+  </td>
+  <td style="padding:8px 0;text-align:right;font-weight:600">{{ booking_time }}</td>
+</tr>
+<tr>
+  <td style="padding:8px 0;color:#6B6B6B">
+    {% if lang == 'ko' %}금액{% elif lang == 'ja' %}金額{% elif lang == 'zh' %}金额{% else %}Amount{% endif %}
+  </td>
+  <td style="padding:8px 0;text-align:right;font-weight:600">{{ "{:,}".format(menu_price|int) }} {{ currency }}</td>
+</tr>
+</table>

@@ -25,6 +25,12 @@ class Config:
     STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
     PLATFORM_FEE_RATE = float(os.environ.get("PLATFORM_FEE_RATE", "0.1"))  # 10%
 
+    SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+    SENDGRID_FROM_EMAIL = os.environ.get("SENDGRID_FROM_EMAIL", "noreply@glowtrip.com")
+    SENDGRID_FROM_NAME = os.environ.get("SENDGRID_FROM_NAME", "Glow Trip")
+    FCM_SERVER_KEY = os.environ.get("FCM_SERVER_KEY", "")
+    NOTIFICATION_REMINDER_HOURS = int(os.environ.get("NOTIFICATION_REMINDER_HOURS", "24"))
+
 
 class TestConfig(Config):
     TESTING = True

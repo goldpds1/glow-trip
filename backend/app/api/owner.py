@@ -1,10 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time as dt_time
 
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import Booking, Shop, Menu, Payment
+from app.models import Booking, Shop, Menu, Payment, BusinessHour
 from app.auth.decorators import role_required
+from app.services import notification as notif_service
 
 owner_bp = Blueprint("owner", __name__, url_prefix="/api/owner")
 
@@ -47,7 +48,7 @@ def update_shop(shop_id):
         return jsonify(error="Shop not found or not yours"), 404
 
     data = request.get_json() or {}
-    allowed = ("name", "description", "address", "phone", "image_url")
+    allowed = ("name", "description", "address", "phone", "image_url", "category")
     for key in allowed:
         if key in data:
             setattr(shop, key, data[key])
@@ -239,6 +240,16 @@ def update_booking_status(booking_id):
 
     db.session.commit()
 
+    notif_map = {
+        "confirmed": "booking_confirmed",
+        "completed": "booking_completed",
+        "noshow": "booking_noshow",
+        "cancelled": "booking_cancelled",
+    }
+    ntype = notif_map.get(new_status)
+    if ntype:
+        notif_service.notify_customer(booking, ntype)
+
     return jsonify(
         id=str(booking.id),
         status=booking.status,
@@ -292,3 +303,63 @@ def shop_settlements(shop_id):
         count=len(items),
         items=items,
     ), 200
+
+
+# ── 영업시간 조회 ──────────────────────────────────────────
+@owner_bp.route("/shops/<shop_id>/hours", methods=["GET"])
+@role_required("owner")
+def get_hours(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Shop not found or not yours"), 404
+
+    hours = BusinessHour.query.filter_by(shop_id=shop.id).order_by(BusinessHour.day_of_week).all()
+    return jsonify(
+        hours=[
+            {
+                "day_of_week": h.day_of_week,
+                "open_time": h.open_time.strftime("%H:%M"),
+                "close_time": h.close_time.strftime("%H:%M"),
+                "is_closed": h.is_closed,
+            }
+            for h in hours
+        ]
+    ), 200
+
+
+# ── 영업시간 설정 (일괄) ────────────────────────────────────
+@owner_bp.route("/shops/<shop_id>/hours", methods=["PUT"])
+@role_required("owner")
+def set_hours(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Shop not found or not yours"), 404
+
+    data = request.get_json() or {}
+    items = data.get("hours", [])
+
+    # Delete existing, re-create
+    BusinessHour.query.filter_by(shop_id=shop.id).delete()
+
+    for item in items:
+        dow = item.get("day_of_week")
+        if dow is None or not (0 <= dow <= 6):
+            continue
+        is_closed = item.get("is_closed", False)
+        try:
+            open_t = dt_time.fromisoformat(item.get("open_time", "10:00"))
+            close_t = dt_time.fromisoformat(item.get("close_time", "20:00"))
+        except (ValueError, TypeError):
+            continue
+
+        bh = BusinessHour(
+            shop_id=shop.id,
+            day_of_week=dow,
+            open_time=open_t,
+            close_time=close_t,
+            is_closed=is_closed,
+        )
+        db.session.add(bh)
+
+    db.session.commit()
+    return jsonify(message="Business hours updated"), 200

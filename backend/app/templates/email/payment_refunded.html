@@ -1,0 +1,17 @@
+{% extends "email/base.html" %}
+{% block content %}
+{% if lang == 'ko' %}
+<h2>환불 처리되었습니다</h2>
+<p>{{ recipient_name }}님, {{ shop_name }}의 예약에 대한 결제가 환불되었습니다.</p>
+{% elif lang == 'ja' %}
+<h2>返金処理されました</h2>
+<p>{{ recipient_name }}様、{{ shop_name }}のご予約の決済が返金されました。</p>
+{% elif lang == 'zh' %}
+<h2>退款已处理</h2>
+<p>{{ recipient_name }}，{{ shop_name }}的预约付款已退还。</p>
+{% else %}
+<h2>Refund Processed</h2>
+<p>Hi {{ recipient_name }}, the payment for your booking at {{ shop_name }} has been refunded.</p>
+{% endif %}
+{% include "email/_booking_details.html" %}
+{% endblock %}

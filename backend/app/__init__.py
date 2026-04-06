@@ -47,6 +47,9 @@ def create_app(test_config=None):
     app.register_blueprint(reviews_bp)
     app.register_blueprint(admin_bp)
 
+    from app.cli import send_reminders_command
+    app.cli.add_command(send_reminders_command)
+
     @app.route("/api/config/maps-key")
     def maps_key():
         key = app.config.get("GOOGLE_MAPS_API_KEY", "")

@@ -1,0 +1,17 @@
+{% extends "email/base.html" %}
+{% block content %}
+{% if lang == 'ko' %}
+<h2>예약 리마인더</h2>
+<p>{{ recipient_name }}님, {{ shop_name }}에서의 예약이 곧 다가옵니다. 잊지 마세요!</p>
+{% elif lang == 'ja' %}
+<h2>予約リマインダー</h2>
+<p>{{ recipient_name }}様、{{ shop_name }}でのご予約が近づいています。お忘れなく！</p>
+{% elif lang == 'zh' %}
+<h2>预约提醒</h2>
+<p>{{ recipient_name }}，您在{{ shop_name }}的预约即将到来，请别忘记！</p>
+{% else %}
+<h2>Booking Reminder</h2>
+<p>Hi {{ recipient_name }}, your upcoming appointment at {{ shop_name }} is coming soon. Don't forget!</p>
+{% endif %}
+{% include "email/_booking_details.html" %}
+{% endblock %}

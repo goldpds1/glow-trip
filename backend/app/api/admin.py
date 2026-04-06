@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import User, Shop, Menu, Booking, Payment, Review
 from app.auth.decorators import role_required
+from app.services import notification as notif_service
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
@@ -196,6 +197,9 @@ def cancel_booking(booking_id):
         booking.payment.payment_status = "refunded"
 
     db.session.commit()
+
+    notif_service.notify_customer(booking, "booking_cancelled")
+    notif_service.notify_owner(booking, "booking_cancelled")
 
     return jsonify(
         id=str(booking.id),

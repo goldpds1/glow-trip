@@ -1,0 +1,17 @@
+{% extends "email/base.html" %}
+{% block content %}
+{% if lang == 'ko' %}
+<h2>새 예약이 접수되었습니다</h2>
+<p>{{ recipient_name }}님, {{ shop_name }}에 새로운 예약이 접수되었습니다.</p>
+{% elif lang == 'ja' %}
+<h2>新しい予約が届きました</h2>
+<p>{{ recipient_name }}様、{{ shop_name }}に新しい予約が届きました。</p>
+{% elif lang == 'zh' %}
+<h2>收到新预约</h2>
+<p>{{ recipient_name }}，{{ shop_name }}收到了新的预约。</p>
+{% else %}
+<h2>New Booking Received</h2>
+<p>Hi {{ recipient_name }}, a new booking has been received at {{ shop_name }}.</p>
+{% endif %}
+{% include "email/_booking_details.html" %}
+{% endblock %}

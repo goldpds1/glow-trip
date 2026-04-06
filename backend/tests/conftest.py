@@ -166,3 +166,17 @@ def menu(app, shop):
         _db.session.commit()
         _db.session.refresh(m)
         return m
+
+
+# ── Notification Fixtures ──────────────────────────────
+
+@pytest.fixture
+def mock_email(monkeypatch):
+    """Patch email service to track calls without actually sending."""
+    sent = []
+    monkeypatch.setattr("app.services.email.is_available", lambda: True)
+    monkeypatch.setattr(
+        "app.services.email.send_email",
+        lambda to, subj, html: sent.append({"to": to, "subject": subj}) or True,
+    )
+    return sent

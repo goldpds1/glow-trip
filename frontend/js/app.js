@@ -7,11 +7,13 @@ let selectedMenu = null;
 // ── Route Map ──────────────────────────────────────────
 const ROUTE_MAP = {
   'auth': '/login',
+  'home': '/',
   'shops': '/shops',
   'shop-detail': '/shops/detail',
   'booking': '/booking',
   'payment': '/payment',
   'bookings': '/bookings',
+  'booking-complete': '/booking/complete',
   'mypage': '/mypage',
 };
 
@@ -49,16 +51,19 @@ function navigate(page, pushState = true) {
     document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
     const navEl = document.getElementById('nav-' + page);
     if (navEl) navEl.classList.add('active');
+    // Map bookings to home nav highlight
+    if (page === 'home') document.getElementById('nav-home')?.classList.add('active');
   }
 
-  if (['shop-detail', 'booking', 'payment'].includes(page)) {
+  if (['shop-detail', 'booking', 'booking-complete', 'payment', 'shops'].includes(page)) {
     backBtn.classList.remove('hidden');
   } else {
     backBtn.classList.add('hidden');
   }
 
   // page-specific load
-  if (page === 'shops') { title.textContent = 'Glow Trip'; loadShops(); }
+  if (page === 'home') { title.textContent = 'Glow Trip'; loadHome(); }
+  if (page === 'shops') { title.textContent = t('navShops'); loadShops(); }
   if (page === 'bookings') { title.textContent = t('myBookings'); loadBookings(); }
   if (page === 'mypage') { title.textContent = t('myPage'); loadMyPage(); }
 }
@@ -79,11 +84,15 @@ function goBack() {
 
 // ── Auth ────────────────────────────────────────────────
 function showRegister() {
+  document.getElementById('authSplash').classList.add('hidden');
+  document.getElementById('authForms').classList.remove('hidden');
   document.getElementById('authLogin').classList.add('hidden');
   document.getElementById('authRegister').classList.remove('hidden');
   document.getElementById('authError').classList.add('hidden');
 }
 function showLogin() {
+  document.getElementById('authSplash').classList.add('hidden');
+  document.getElementById('authForms').classList.remove('hidden');
   document.getElementById('authRegister').classList.add('hidden');
   document.getElementById('authLogin').classList.remove('hidden');
   document.getElementById('authError').classList.add('hidden');
@@ -106,7 +115,7 @@ async function doLogin() {
   const data = await res.json();
   if (!res.ok) return showAuthError(data.error || t('loginFailed'));
   setTokens(data);
-  navigate('shops');
+  navigate('home');
 }
 
 async function doRegister() {
@@ -124,7 +133,7 @@ async function doRegister() {
   const data = await res.json();
   if (!res.ok) return showAuthError(data.error || t('registerFailed'));
   setTokens(data);
-  navigate('shops');
+  navigate('home');
 }
 
 function doLogout() {
@@ -185,6 +194,73 @@ async function socialLogin(provider) {
     }
   } catch (err) {
     showAuthError(err.message || t('socialFailed'));
+  }
+}
+
+// ── Home ────────────────────────────────────────────────
+const CATEGORIES = ['skincare', 'massage', 'facial', 'waxing', 'body'];
+let selectedCategory = '';
+
+async function loadHome() {
+  renderCategories();
+  loadPopularShops();
+  loadHomeGrid();
+}
+
+function renderCategories() {
+  const container = document.getElementById('categoryTags');
+  container.innerHTML = `<span class="category-tag ${!selectedCategory ? 'active' : ''}" onclick="selectCategory('')">${t('allCategories')}</span>` +
+    CATEGORIES.map(c =>
+      `<span class="category-tag ${selectedCategory === c ? 'active' : ''}" onclick="selectCategory('${c}')">${t('cat_' + c) || c}</span>`
+    ).join('');
+}
+
+function selectCategory(cat) {
+  selectedCategory = cat;
+  renderCategories();
+  loadHomeGrid();
+}
+
+async function loadPopularShops() {
+  const res = await get('/shops?per_page=10&sort=popular');
+  const data = await res.json();
+  const container = document.getElementById('popularShopsScroll');
+  if (!data.shops.length) { container.innerHTML = ''; return; }
+  container.innerHTML = data.shops.map(s => `
+    <div class="h-card" onclick="openShop('${s.id}')">
+      ${s.image_url
+        ? `<img class="h-card-img" src="${s.image_url}">`
+        : `<div class="h-card-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">&#10024;</div>`}
+      <div class="h-card-name">${esc(s.name)}</div>
+      <div class="h-card-sub">${s.min_price ? t('fromPrice') + ' ' + formatPrice(s.min_price) : ''}</div>
+    </div>
+  `).join('');
+}
+
+async function loadHomeGrid() {
+  let qs = '?per_page=10';
+  if (selectedCategory) qs += `&category=${selectedCategory}`;
+  const res = await get('/shops' + qs);
+  const data = await res.json();
+  const container = document.getElementById('homeShopGrid');
+  if (!data.shops.length) { container.innerHTML = `<div class="loading" style="grid-column:1/-1">${t('noShops')}</div>`; return; }
+  container.innerHTML = data.shops.map(s => `
+    <div class="shop-grid-card" onclick="openShop('${s.id}')">
+      ${s.image_url
+        ? `<img src="${s.image_url}">`
+        : `<div style="width:100%;height:120px;border-radius:12px;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;font-size:24px">&#10024;</div>`}
+      <div class="sg-name">${esc(s.name)}</div>
+      ${s.avg_rating ? `<div class="sg-rating">&#9733; ${s.avg_rating} (${s.review_count || 0})</div>` : ''}
+      ${s.min_price ? `<div class="sg-price">${formatPrice(s.min_price)}~</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function searchFromHome() {
+  const keyword = document.getElementById('homeSearchInput')?.value?.trim() || '';
+  if (keyword.length >= 1) {
+    document.getElementById('searchInput').value = keyword;
+    navigate('shops');
   }
 }
 
@@ -288,16 +364,16 @@ async function loadShops() {
   }
 
   container.innerHTML = data.shops.map(s => `
-    <div class="card" onclick="openShop('${s.id}')">
-      <div class="card-body shop-card">
-        ${s.image_url
-          ? `<img src="${s.image_url}" class="shop-thumb" style="width:64px;height:64px;object-fit:cover;border-radius:8px">`
-          : `<div class="shop-thumb">&#10024;</div>`}
-        <div class="shop-info">
-          <div class="card-title">${esc(s.name)}</div>
-          <div class="card-sub">${esc(s.description || '')}</div>
-          <div class="address">${esc(s.address || '')}${s.distance_km != null ? ` · ${s.distance_km}${t('km')}` : ''}</div>
-          ${s.avg_rating ? `<div class="shop-rating" style="color:#f5a623;font-size:13px;margin-top:2px">${'★'.repeat(Math.round(s.avg_rating))}${'☆'.repeat(5 - Math.round(s.avg_rating))} ${s.avg_rating}</div>` : ''}
+    <div class="shop-v-card" onclick="openShop('${s.id}')">
+      ${s.image_url
+        ? `<img src="${s.image_url}" class="sv-img">`
+        : `<div class="sv-img" style="display:flex;align-items:center;justify-content:center;font-size:28px;background:var(--accent-bg)">&#10024;</div>`}
+      <div class="sv-body">
+        <div class="sv-name">${esc(s.name)}</div>
+        <div class="sv-addr">${esc(s.address || '')}${s.distance_km != null ? ` · ${s.distance_km}${t('km')}` : ''}</div>
+        <div class="sv-meta">
+          ${s.avg_rating ? `<span class="sv-rating">&#9733; ${s.avg_rating} (${s.review_count || 0})</span>` : ''}
+          ${s.min_price ? `<span class="sv-price">${formatPrice(s.min_price)}~</span>` : ''}
         </div>
       </div>
     </div>
@@ -312,40 +388,59 @@ async function openShop(id) {
   document.getElementById('headerTitle').textContent = selectedShop.name;
 
   const hasCoords = selectedShop.latitude && selectedShop.longitude;
+  const stars = selectedShop.avg_rating
+    ? `&#9733; ${selectedShop.avg_rating} (${selectedShop.review_count || 0})`
+    : '';
   const html = `
-    ${selectedShop.image_url ? `<div style="margin:0 16px"><img src="${selectedShop.image_url}" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px"></div>` : ''}
-    <div class="card">
-      <div class="card-body">
-        <h2 style="font-size:20px;margin-bottom:8px">${esc(selectedShop.name)}</h2>
-        <p class="card-sub">${esc(selectedShop.description || '')}</p>
-        <p class="card-sub mt-8">${esc(selectedShop.address || '')}</p>
-        ${selectedShop.phone ? `<p class="card-sub mt-8">Tel: ${esc(selectedShop.phone)}</p>` : ''}
+    <div class="hero-wrap">
+      ${selectedShop.image_url
+        ? `<img class="hero-image" src="${selectedShop.image_url}">`
+        : `<div class="hero-image" style="display:flex;align-items:center;justify-content:center;font-size:40px;background:var(--accent-bg)">&#10024;</div>`}
+      <div class="hero-overlay">
+        <button class="hero-btn heart-btn" onclick="event.stopPropagation();toggleFav(this)">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 1 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </button>
       </div>
     </div>
-    ${hasCoords ? `<div id="detailMap" style="height:200px;margin:0 16px;border-radius:12px;overflow:hidden"></div>` : ''}
-    <div class="card">
-      <div class="card-body">
-        <h3 style="font-size:16px;margin-bottom:12px">${t('menu')}</h3>
-        ${selectedShop.menus.map(m => `
-          <div class="menu-item" onclick="selectMenu('${m.id}')">
-            ${m.image_url ? `<img src="${m.image_url}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;flex-shrink:0">` : ''}
-            <div style="flex:1">
-              <div class="menu-name">${esc(m.title)}</div>
-              <div class="menu-desc">${esc(m.description || '')}</div>
-            </div>
-            <div class="menu-meta">
-              <div class="menu-price">${formatPrice(m.price)}</div>
-              <div class="menu-duration">${m.duration}${t('min')}</div>
+
+    <div style="padding:20px 16px 12px">
+      <h2 style="font-size:22px;font-weight:700;margin:0">${esc(selectedShop.name)}</h2>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text-light)">
+        ${stars ? `<span style="color:var(--warning)">${stars}</span>` : ''}
+        ${selectedShop.address ? `<span>&#128205; ${esc(selectedShop.address)}</span>` : ''}
+      </div>
+      ${selectedShop.description ? `<p style="margin-top:10px;font-size:14px;color:var(--text-light);line-height:1.5">${esc(selectedShop.description)}</p>` : ''}
+    </div>
+
+    ${hasCoords ? `<div id="detailMap" style="height:180px;margin:0 16px;border-radius:12px;overflow:hidden"></div>` : ''}
+
+    <div style="padding:16px">
+      <h3 class="section-title">${t('menu')}</h3>
+      ${selectedShop.menus.map(m => `
+        <div class="service-card" onclick="selectMenu('${m.id}')">
+          ${m.image_url
+            ? `<img src="${m.image_url}" class="sc-img">`
+            : `<div class="sc-img" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--accent-bg)">&#10024;</div>`}
+          <div class="sc-body">
+            <div class="sc-name">${esc(m.title)}</div>
+            <div class="sc-desc">${esc(m.description || '')}</div>
+            <div class="sc-meta">
+              <span class="sc-price">${formatPrice(m.price)}</span>
+              <span class="sc-dur">${m.duration}${t('min')}</span>
             </div>
           </div>
-        `).join('')}
-      </div>
+        </div>
+      `).join('')}
     </div>
-    <div class="card">
-      <div class="card-body">
-        <h3 style="font-size:16px;margin-bottom:12px">${t('reviews')}</h3>
-        <div id="shopReviews"><div class="loading">...</div></div>
-      </div>
+
+    <div style="padding:0 16px 16px">
+      <h3 class="section-title">${t('reviews')}</h3>
+      <div id="shopReviews"><div class="loading">...</div></div>
+    </div>
+
+    <div style="height:80px"></div>
+    <div class="sticky-bottom">
+      <button class="btn btn-book" onclick="selectFirstMenu()">${t('bookNow')}</button>
     </div>
   `;
   document.getElementById('shopDetail').innerHTML = html;
@@ -362,6 +457,18 @@ async function openShop(id) {
   }
 }
 
+function selectFirstMenu() {
+  if (selectedShop?.menus?.length === 1) {
+    selectMenu(selectedShop.menus[0].id);
+  } else if (selectedShop?.menus?.length > 1) {
+    // Scroll to menu section
+    document.querySelector('.service-card')?.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+let selectedDate = null;
+let selectedSlot = null;
+
 function selectMenu(menuId) {
   selectedMenu = selectedShop.menus.find(m => m.id === menuId);
   if (!selectedMenu) return;
@@ -372,7 +479,65 @@ function selectMenu(menuId) {
   document.getElementById('bookingRequest').value = '';
   document.getElementById('bookingError').classList.add('hidden');
   document.getElementById('headerTitle').textContent = t('book');
+  selectedDate = null;
+  selectedSlot = null;
+  renderDatePicker();
+  document.getElementById('slotGrid').innerHTML = `<div class="loading">${t('selectDate')}</div>`;
   navigate('booking');
+}
+
+function renderDatePicker() {
+  const container = document.getElementById('dateScroll');
+  const today = new Date();
+  let html = '';
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const isActive = selectedDate === dateStr;
+    html += `<div class="date-item ${isActive ? 'active' : ''}" onclick="pickDate('${dateStr}')">
+      <div class="date-day">${days[d.getDay()]}</div>
+      <div class="date-num">${d.getDate()}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+async function pickDate(dateStr) {
+  selectedDate = dateStr;
+  selectedSlot = null;
+  renderDatePicker();
+  const grid = document.getElementById('slotGrid');
+  grid.innerHTML = `<div class="loading">...</div>`;
+
+  const res = await get(`/shops/${selectedShop.id}/slots?date=${dateStr}`);
+  const data = await res.json();
+
+  if (data.closed) {
+    grid.innerHTML = `<div class="loading">${t('dayClosed')}</div>`;
+    return;
+  }
+
+  if (!data.slots.length) {
+    grid.innerHTML = `<div class="loading">${t('noSlots')}</div>`;
+    return;
+  }
+
+  grid.innerHTML = data.slots.map(s =>
+    `<div class="slot-item ${s.available ? '' : 'disabled'} ${selectedSlot === s.time ? 'active' : ''}"
+          onclick="${s.available ? `pickSlot('${s.time}')` : ''}">${s.time}</div>`
+  ).join('');
+}
+
+function pickSlot(time) {
+  selectedSlot = time;
+  // Update hidden field
+  document.getElementById('bookingTime').value = `${selectedDate}T${time}:00`;
+  // Re-render slots to show active state
+  document.querySelectorAll('.slot-item').forEach(el => {
+    el.classList.toggle('active', el.textContent.trim() === time);
+  });
 }
 
 // ── Booking ─────────────────────────────────────────────
@@ -406,9 +571,19 @@ async function createBooking() {
   if (data.payment_status === 'pending' && data.id) {
     startPayment(data.id, selectedMenu.title, selectedMenu.price);
   } else {
-    alert(t('bookingSuccess'));
-    navigate('bookings');
+    showBookingComplete(data);
   }
+}
+
+function showBookingComplete(booking) {
+  const summary = document.getElementById('completeSummary');
+  summary.innerHTML = `
+    <p><strong>${esc(selectedShop?.name || '')}</strong></p>
+    <p>${esc(selectedMenu?.title || '')}</p>
+    <p>${selectedDate || ''} ${selectedSlot || ''}</p>
+    ${selectedMenu ? `<p>${formatPrice(selectedMenu.price)}</p>` : ''}
+  `;
+  navigate('booking-complete');
 }
 
 async function loadBookings() {
@@ -618,6 +793,20 @@ async function submitReview(bookingId) {
 }
 
 // ── Helpers ─────────────────────────────────────────────
+function showToast(msg) {
+  let el = document.querySelector('.toast');
+  if (!el) { el = document.createElement('div'); el.className = 'toast'; document.body.appendChild(el); }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._tid);
+  el._tid = setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+function toggleFav(btn) {
+  const active = btn.classList.toggle('active');
+  showToast(t(active ? 'favAdded' : 'favRemoved'));
+}
+
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = s;
@@ -638,6 +827,7 @@ function formatDate(iso) {
   renderLangSelector('headerLang');
   applyI18n();
 
+
   if (!getToken()) {
     navigate('auth', true);
     return;
@@ -648,6 +838,6 @@ function formatDate(iso) {
     navigate(page, false);
     history.replaceState({ page }, '', ROUTE_MAP[page]);
   } else {
-    navigate('shops', true);
+    navigate('home', true);
   }
 })();
