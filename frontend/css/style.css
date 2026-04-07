@@ -298,6 +298,7 @@ textarea.form-input { resize: vertical; min-height: 80px; }
   font-size: 18px; color: var(--text); backdrop-filter: blur(4px);
 }
 .hero-btn.heart-btn { color: #E8827C; }
+.hero-btn.heart-btn.active svg { fill: #E8827C; }
 .hero-btn.heart-btn:active svg { fill: #E8827C; transition: fill .15s; }
 
 /* ── Service Card (Shop Detail Menu) ────────────────── */

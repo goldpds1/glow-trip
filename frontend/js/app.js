@@ -122,7 +122,7 @@ async function doRegister() {
   const name = document.getElementById('regName').value.trim();
   const email = document.getElementById('regEmail').value.trim();
   const password = document.getElementById('regPassword').value;
-  const language = document.getElementById('regLang').value;
+  const language = currentLang || 'en';
   if (!email || !password) return showAuthError(t('emailPwRequired'));
   if (password.length < 8) return showAuthError(t('pwMin8'));
   const res = await fetch(API + '/auth/register', {
