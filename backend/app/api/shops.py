@@ -7,22 +7,7 @@ from datetime import datetime, timedelta, time as dt_time
 from app import db
 from app.models import Shop, Menu, Review, Booking, BusinessHour
 from app.auth.decorators import login_required, role_required
-
-
-def _shop_avg_rating(shop_id):
-    result = db.session.query(db.func.avg(Review.rating)).filter_by(shop_id=shop_id).scalar()
-    return round(float(result), 1) if result else 0
-
-
-def _shop_review_count(shop_id):
-    return Review.query.filter_by(shop_id=shop_id).count()
-
-
-def _shop_min_price(shop_id):
-    result = db.session.query(db.func.min(Menu.price)).filter_by(
-        shop_id=shop_id, is_active=True
-    ).scalar()
-    return result
+from app.utils import shop_avg_rating as _shop_avg_rating, shop_review_count as _shop_review_count, shop_min_price as _shop_min_price
 
 
 def _haversine(lat1, lon1, lat2, lon2):
@@ -61,6 +46,38 @@ def list_shops():
     if category:
         q = q.filter(Shop.category == category)
 
+    # 가격대 필터 (최저 메뉴 가격 기준)
+    price_min = request.args.get("price_min", type=int)
+    price_max = request.args.get("price_max", type=int)
+    if price_min is not None or price_max is not None:
+        min_price_sub = (
+            db.session.query(
+                Menu.shop_id,
+                db.func.min(Menu.price).label("mp"),
+            )
+            .filter(Menu.is_active.is_(True))
+            .group_by(Menu.shop_id)
+            .subquery()
+        )
+        q = q.join(min_price_sub, Shop.id == min_price_sub.c.shop_id)
+        if price_min is not None:
+            q = q.filter(min_price_sub.c.mp >= price_min)
+        if price_max is not None:
+            q = q.filter(min_price_sub.c.mp <= price_max)
+
+    # 최소 평점 필터
+    min_rating = request.args.get("min_rating", type=float)
+    if min_rating is not None:
+        avg_sub = (
+            db.session.query(
+                Review.shop_id,
+                db.func.avg(Review.rating).label("ar"),
+            )
+            .group_by(Review.shop_id)
+            .subquery()
+        )
+        q = q.join(avg_sub, Shop.id == avg_sub.c.shop_id).filter(avg_sub.c.ar >= min_rating)
+
     # 거리순 정렬
     user_lat = request.args.get("lat", type=float)
     user_lng = request.args.get("lng", type=float)
@@ -84,15 +101,24 @@ def list_shops():
             d["distance_km"] = distance_km
         return d
 
-    if sort == "distance" and user_lat is not None and user_lng is not None:
+    # In-memory sort modes (distance, rating, price)
+    if sort in ("distance", "rating", "price"):
         all_shops = q.all()
         shop_list = []
         for s in all_shops:
             dist = None
-            if s.latitude and s.longitude:
-                dist = round(_haversine(user_lat, user_lng, s.latitude, s.longitude), 2)
+            if sort == "distance" and user_lat is not None and user_lng is not None:
+                if s.latitude and s.longitude:
+                    dist = round(_haversine(user_lat, user_lng, s.latitude, s.longitude), 2)
             shop_list.append((s, dist))
-        shop_list.sort(key=lambda x: (x[1] is None, x[1] or 0))
+
+        if sort == "distance" and user_lat is not None and user_lng is not None:
+            shop_list.sort(key=lambda x: (x[1] is None, x[1] or 0))
+        elif sort == "rating":
+            shop_list.sort(key=lambda x: _shop_avg_rating(x[0].id), reverse=True)
+        elif sort == "price":
+            shop_list.sort(key=lambda x: (_shop_min_price(x[0].id) is None, _shop_min_price(x[0].id) or 0))
+
         total = len(shop_list)
         start = (page - 1) * per_page
         page_items = shop_list[start:start + per_page]

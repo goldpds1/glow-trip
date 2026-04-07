@@ -33,10 +33,10 @@ glow-trip/
 │   ├── app/
 │   │   ├── __init__.py        # App Factory (create_app)
 │   │   ├── config.py          # 환경변수 기반 설정
-│   │   ├── models/            # SQLAlchemy 모델 (user, shop, menu, booking, payment)
+│   │   ├── models/            # SQLAlchemy 모델 (user, shop, menu, booking, payment, review, business_hour, notification, favorite)
 │   │   ├── auth/              # 인증 (routes, social, jwt_utils, decorators)
-│   │   ├── api/               # 비즈니스 API (shops, bookings, owner, payments)
-│   │   └── services/          # 외부 서비스 (translator, payment)
+│   │   ├── api/               # 비즈니스 API (shops, bookings, owner, payments, favorites, admin)
+│   │   └── services/          # 외부 서비스 (translator, payment, email, notification, push)
 │   ├── seed.py                # 시드 데이터
 │   ├── run.py                 # 로컬 실행 진입점
 │   └── requirements.txt
@@ -126,7 +126,8 @@ docker exec -e TEST_DATABASE_URL="postgresql://glowtrip:glowtrip@db:5432/glowtri
 
 - **API 응답**: JSON 형식, 에러 시 `{"error": "메시지"}` + 적절한 HTTP 상태 코드
 - **프론트엔드 텍스트**: 하드코딩 금지. `lang.js`의 `I18N` 객체에 4개 언어(ko/en/ja/zh) 모두 추가
-- **Blueprint URL prefix**: `/api/auth`, `/api/shops`, `/api/bookings`, `/api/owner`, `/api/payments`
+- **Blueprint URL prefix**: `/api/auth`, `/api/auth/social`, `/api/shops`, `/api/bookings`, `/api/owner`, `/api/payments`, `/api/favorites`, `/api/admin`, `/api/reviews`, `/api/upload`
+- **Config API**: `/api/config/maps-key`, `/api/config/social` (client_id만 노출, secret 미포함)
 - **결제**: Stripe 키 없으면 503 반환, 번역 키 없으면 fallback
 - **CSS**: `style.css`에 변수(`--primary`, `--border` 등) 사용, 모바일 퍼스트 반응형
 - **문서**: README.md는 브릿지 역할, 상세 내용은 기획서.md 참고

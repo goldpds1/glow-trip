@@ -141,59 +141,138 @@ function doLogout() {
   navigate('auth');
 }
 
+// ── Social Config (loaded from backend) ───────────────
+let socialConfig = { google_client_id: '', apple_client_id: '', line_channel_id: '' };
+
+async function loadSocialConfig() {
+  try {
+    const res = await fetch(API + '/config/social');
+    if (res.ok) socialConfig = await res.json();
+  } catch (e) { /* silent — social login just won't be available */ }
+  updateSocialButtons();
+}
+
+function updateSocialButtons() {
+  document.querySelectorAll('.btn-google').forEach(btn => {
+    btn.disabled = !socialConfig.google_client_id;
+    if (btn.disabled) btn.style.opacity = '0.5';
+    else btn.style.opacity = '';
+  });
+  document.querySelectorAll('.btn-apple').forEach(btn => {
+    btn.disabled = !socialConfig.apple_client_id;
+    if (btn.disabled) btn.style.opacity = '0.5';
+    else btn.style.opacity = '';
+  });
+  document.querySelectorAll('.btn-line').forEach(btn => {
+    btn.disabled = !socialConfig.line_channel_id;
+    if (btn.disabled) btn.style.opacity = '0.5';
+    else btn.style.opacity = '';
+  });
+}
+
 async function socialLogin(provider) {
   showAuthError('');
   document.getElementById('authError').classList.add('hidden');
 
   try {
     if (provider === 'google') {
-      // Google Sign-In (GSI) — requires google client script loaded
       if (!window.google?.accounts?.id) {
-        return showAuthError('Google' + t('socialUnavailable'));
+        return showAuthError('Google ' + t('socialUnavailable'));
+      }
+      if (!socialConfig.google_client_id) {
+        return showAuthError('Google ' + t('socialUnavailable'));
       }
       google.accounts.id.initialize({
-        client_id: '', // Set your Google Client ID
+        client_id: socialConfig.google_client_id,
         callback: async (resp) => {
           const res = await fetch(API + '/auth/social/google', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_token: resp.credential }),
+            body: JSON.stringify({ id_token: resp.credential, language: getLang() }),
           });
           const data = await res.json();
           if (!res.ok) return showAuthError(data.error || t('socialFailed'));
           setTokens(data);
-          navigate('shops');
+          navigate('home');
         },
       });
       google.accounts.id.prompt();
 
     } else if (provider === 'apple') {
-      // Apple Sign-In JS — requires Apple JS SDK loaded
       if (!window.AppleID) {
-        return showAuthError('Apple' + t('socialUnavailable'));
+        return showAuthError('Apple ' + t('socialUnavailable'));
       }
+      if (!socialConfig.apple_client_id) {
+        return showAuthError('Apple ' + t('socialUnavailable'));
+      }
+      AppleID.auth.init({
+        clientId: socialConfig.apple_client_id,
+        scope: 'email name',
+        redirectURI: window.location.origin + '/',
+        usePopup: true,
+      });
       const appleResp = await AppleID.auth.signIn();
       const res = await fetch(API + '/auth/social/apple', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_token: appleResp.authorization.id_token }),
+        body: JSON.stringify({ id_token: appleResp.authorization.id_token, name: appleResp.user?.name?.firstName, language: getLang() }),
       });
       const data = await res.json();
       if (!res.ok) return showAuthError(data.error || t('socialFailed'));
       setTokens(data);
-      navigate('shops');
+      navigate('home');
 
     } else if (provider === 'line') {
-      // LINE Login — OAuth redirect flow
-      const lineClientId = '';  // Set your LINE Channel ID
+      if (!socialConfig.line_channel_id) {
+        return showAuthError('LINE ' + t('socialUnavailable'));
+      }
       const redirectUri = encodeURIComponent(window.location.origin + '/');
       const state = Math.random().toString(36).substring(2);
       sessionStorage.setItem('line_state', state);
       window.location.href =
-        `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${lineClientId}&redirect_uri=${redirectUri}&state=${state}&scope=profile%20openid%20email`;
+        `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${socialConfig.line_channel_id}&redirect_uri=${redirectUri}&state=${state}&scope=profile%20openid%20email`;
     }
   } catch (err) {
     showAuthError(err.message || t('socialFailed'));
+  }
+}
+
+// ── LINE OAuth Callback Handler ───────────────────────
+async function handleLineCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  const state = params.get('state');
+  const savedState = sessionStorage.getItem('line_state');
+
+  if (!code || state !== savedState) {
+    showAuthError(t('lineLoginFailed'));
+    navigate('auth', true);
+    return;
+  }
+  sessionStorage.removeItem('line_state');
+
+  try {
+    const res = await fetch(API + '/auth/social/line/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        redirect_uri: window.location.origin + '/',
+        language: getLang(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      showAuthError(data.error || t('socialFailed'));
+      navigate('auth', true);
+      return;
+    }
+    setTokens(data);
+    history.replaceState(null, '', '/');
+    navigate('home');
+  } catch (err) {
+    showAuthError(err.message || t('socialFailed'));
+    navigate('auth', true);
   }
 }
 
@@ -267,7 +346,6 @@ function searchFromHome() {
 // ── Shops ───────────────────────────────────────────────
 let searchTimer;
 let shopViewMode = 'list';
-let sortByDistance = false;
 let userLat = null;
 let userLng = null;
 let shopMapInstance = null;
@@ -289,17 +367,24 @@ function setShopView(mode) {
   if (mode === 'map') renderShopMap(cachedShops);
 }
 
-function toggleDistanceSort() {
-  sortByDistance = !sortByDistance;
-  document.getElementById('btnSortDistance').textContent = sortByDistance ? t('sortDistance') : t('sortDefault');
-  if (sortByDistance && !userLat) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => { userLat = pos.coords.latitude; userLng = pos.coords.longitude; loadShops(); },
-      () => { alert(t('locationPermission')); sortByDistance = false; document.getElementById('btnSortDistance').textContent = t('sortDefault'); }
-    );
-  } else {
-    loadShops();
-  }
+function changeShopSort() {
+  loadShops();
+}
+
+function toggleFilterPanel() {
+  document.getElementById('filterPanel').classList.toggle('hidden');
+}
+
+function applyFilters() {
+  loadShops();
+}
+
+function resetFilters() {
+  document.getElementById('filterPriceMin').value = '';
+  document.getElementById('filterPriceMax').value = '';
+  document.getElementById('filterMinRating').value = '';
+  document.getElementById('shopSortSelect').value = '';
+  loadShops();
 }
 
 async function loadGoogleMaps() {
@@ -349,9 +434,30 @@ function renderShopMap(shops) {
 async function loadShops() {
   const keyword = document.getElementById('searchInput')?.value?.trim() || '';
   let qs = keyword ? `?keyword=${encodeURIComponent(keyword)}` : '?';
-  if (sortByDistance && userLat) {
+
+  // Sort
+  const sortVal = document.getElementById('shopSortSelect')?.value || '';
+  if (sortVal === 'distance') {
+    if (!userLat) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { userLat = pos.coords.latitude; userLng = pos.coords.longitude; loadShops(); },
+        () => { document.getElementById('shopSortSelect').value = ''; }
+      );
+      return;
+    }
     qs += `${qs.includes('=') ? '&' : ''}lat=${userLat}&lng=${userLng}&sort=distance`;
+  } else if (sortVal) {
+    qs += `${qs.includes('=') ? '&' : ''}sort=${sortVal}`;
   }
+
+  // Filters
+  const priceMin = document.getElementById('filterPriceMin')?.value;
+  const priceMax = document.getElementById('filterPriceMax')?.value;
+  const minRating = document.getElementById('filterMinRating')?.value;
+  if (priceMin) qs += `&price_min=${priceMin}`;
+  if (priceMax) qs += `&price_max=${priceMax}`;
+  if (minRating) qs += `&min_rating=${minRating}`;
+
   const res = await get('/shops' + qs);
   const data = await res.json();
   const container = document.getElementById('shopList');
@@ -446,6 +552,10 @@ async function openShop(id) {
   document.getElementById('shopDetail').innerHTML = html;
   navigate('shop-detail');
   loadShopReviews(id);
+  // Check favorite status
+  get('/favorites/check/' + id).then(r => r.json()).then(d => {
+    if (d.favorited) document.querySelector('.heart-btn')?.classList.add('active');
+  }).catch(() => {});
 
   if (hasCoords) {
     loadGoogleMaps().then(() => {
@@ -496,7 +606,7 @@ function renderDatePicker() {
     d.setDate(today.getDate() + i);
     const dateStr = d.toISOString().slice(0, 10);
     const isActive = selectedDate === dateStr;
-    html += `<div class="date-item ${isActive ? 'active' : ''}" onclick="pickDate('${dateStr}')">
+    html += `<div class="date-item ${isActive ? 'selected' : ''}" onclick="pickDate('${dateStr}')">
       <div class="date-day">${days[d.getDay()]}</div>
       <div class="date-num">${d.getDate()}</div>
     </div>`;
@@ -525,7 +635,7 @@ async function pickDate(dateStr) {
   }
 
   grid.innerHTML = data.slots.map(s =>
-    `<div class="slot-item ${s.available ? '' : 'disabled'} ${selectedSlot === s.time ? 'active' : ''}"
+    `<div class="slot-item ${s.available ? '' : 'unavailable'} ${selectedSlot === s.time ? 'active' : ''}"
           onclick="${s.available ? `pickSlot('${s.time}')` : ''}">${s.time}</div>`
   ).join('');
 }
@@ -647,26 +757,100 @@ async function cancelBooking(id) {
 }
 
 // ── My Page ─────────────────────────────────────────────
+let myProfileData = null;
+
 async function loadMyPage() {
   const res = await get('/auth/me');
-  const data = await res.json();
-  document.getElementById('userInfo').innerHTML = `
-    <div class="card-title">${esc(data.name || t('noName'))}</div>
-    <div class="card-sub mt-8">${esc(data.email)}</div>
-    <div class="card-sub">${t('role')}: ${data.role} | ${t('lang')}: ${data.language}</div>
-  `;
+  myProfileData = await res.json();
+  renderProfileView();
+  loadFavorites();
+
   const ownerLink = document.getElementById('ownerLink');
   const adminLink = document.getElementById('adminLink');
-  if (data.role === 'owner' || data.role === 'admin') {
+  if (myProfileData.role === 'owner' || myProfileData.role === 'admin') {
     ownerLink.classList.remove('hidden');
   } else {
     ownerLink.classList.add('hidden');
   }
-  if (data.role === 'admin') {
+  if (myProfileData.role === 'admin') {
     adminLink.classList.remove('hidden');
   } else {
     adminLink.classList.add('hidden');
   }
+}
+
+function renderProfileView() {
+  const d = myProfileData;
+  document.getElementById('userInfo').innerHTML = `
+    <div class="card-title">${esc(d.name || t('noName'))}</div>
+    <div class="card-sub mt-8">${esc(d.email)}</div>
+    <div class="card-sub">${d.phone ? esc(d.phone) + ' | ' : ''}${t('role')}: ${d.role} | ${t('lang')}: ${d.language}</div>
+    <button class="btn btn-outline btn-sm mt-8" onclick="showEditProfile()">${t('editProfile')}</button>
+  `;
+  document.getElementById('profileEditForm').classList.add('hidden');
+}
+
+function showEditProfile() {
+  document.getElementById('editName').value = myProfileData.name || '';
+  document.getElementById('editPhone').value = myProfileData.phone || '';
+  document.getElementById('editLang').value = myProfileData.language || 'en';
+  document.getElementById('profileEditForm').classList.remove('hidden');
+}
+
+function cancelEditProfile() {
+  document.getElementById('profileEditForm').classList.add('hidden');
+}
+
+async function saveProfile() {
+  const body = {
+    name: document.getElementById('editName').value.trim(),
+    phone: document.getElementById('editPhone').value.trim(),
+    language: document.getElementById('editLang').value,
+  };
+  const res = await patch('/auth/me', body);
+  if (res.ok) {
+    myProfileData = await res.json();
+    renderProfileView();
+    showToast(t('profileUpdated'));
+    // Update app language if changed
+    if (body.language !== currentLang) {
+      changeLang(body.language);
+    }
+  }
+}
+
+// ── Favorites ───────────────────────────────────────────
+async function loadFavorites() {
+  const res = await get('/favorites');
+  const data = await res.json();
+  const container = document.getElementById('favoritesList');
+  if (!data.shops.length) {
+    container.innerHTML = `<div class="loading" style="font-size:13px;color:var(--text-light)">${t('noFavorites')}</div>`;
+    return;
+  }
+  container.innerHTML = data.shops.map(s => `
+    <div class="shop-v-card" onclick="openShop('${s.id}')">
+      ${s.image_url
+        ? `<img src="${s.image_url}" class="sv-img">`
+        : `<div class="sv-img" style="display:flex;align-items:center;justify-content:center;font-size:28px;background:var(--accent-bg)">&#10024;</div>`}
+      <div class="sv-body">
+        <div class="sv-name">${esc(s.name)}</div>
+        <div class="sv-addr">${esc(s.address || '')}</div>
+        <div class="sv-meta">
+          ${s.avg_rating ? `<span class="sv-rating">&#9733; ${s.avg_rating} (${s.review_count || 0})</span>` : ''}
+          ${s.min_price ? `<span class="sv-price">${formatPrice(s.min_price)}~</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function toggleFavAPI(shopId, btn) {
+  const res = await post('/favorites/' + shopId);
+  if (!res.ok) return;
+  const data = await res.json();
+  if (btn) btn.classList.toggle('active', data.favorited);
+  showToast(t(data.favorited ? 'favAdded' : 'favRemoved'));
 }
 
 // ── Payment (Stripe.js) ────────────────────────────────
@@ -803,8 +987,12 @@ function showToast(msg) {
 }
 
 function toggleFav(btn) {
-  const active = btn.classList.toggle('active');
-  showToast(t(active ? 'favAdded' : 'favRemoved'));
+  if (selectedShop?.id) {
+    toggleFavAPI(selectedShop.id, btn);
+  } else {
+    const active = btn.classList.toggle('active');
+    showToast(t(active ? 'favAdded' : 'favRemoved'));
+  }
 }
 
 function esc(s) {
@@ -826,7 +1014,14 @@ function formatDate(iso) {
 (function init() {
   renderLangSelector('headerLang');
   applyI18n();
+  loadSocialConfig();
 
+  // LINE OAuth callback — URL에 code 파라미터가 있으면 처리
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('code') && urlParams.has('state')) {
+    handleLineCallback();
+    return;
+  }
 
   if (!getToken()) {
     navigate('auth', true);

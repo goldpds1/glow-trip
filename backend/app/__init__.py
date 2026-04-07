@@ -37,6 +37,7 @@ def create_app(test_config=None):
     from app.api.upload import upload_bp
     from app.api.reviews import reviews_bp
     from app.api.admin import admin_bp
+    from app.api.favorites import favorites_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(social_bp)
     app.register_blueprint(shops_bp)
@@ -46,6 +47,7 @@ def create_app(test_config=None):
     app.register_blueprint(upload_bp)
     app.register_blueprint(reviews_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(favorites_bp)
 
     from app.cli import send_reminders_command
     app.cli.add_command(send_reminders_command)
@@ -54,6 +56,14 @@ def create_app(test_config=None):
     def maps_key():
         key = app.config.get("GOOGLE_MAPS_API_KEY", "")
         return jsonify(key=key), 200
+
+    @app.route("/api/config/social")
+    def social_config():
+        return jsonify(
+            google_client_id=app.config.get("GOOGLE_CLIENT_ID", ""),
+            apple_client_id=app.config.get("APPLE_CLIENT_ID", ""),
+            line_channel_id=app.config.get("LINE_CHANNEL_ID", ""),
+        ), 200
 
     @app.route("/health")
     def health():

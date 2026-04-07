@@ -104,6 +104,45 @@ def me():
         id=str(u.id),
         email=u.email,
         name=u.name,
+        phone=u.phone,
+        role=u.role,
+        language=u.language,
+        auth_provider=u.auth_provider,
+    ), 200
+
+
+# ── 프로필 수정 ─────────────────────────────────────────
+@auth_bp.route("/me", methods=["PATCH"])
+@login_required
+def update_me():
+    data = request.get_json() or {}
+    u = g.current_user
+    allowed_langs = {"ko", "en", "ja", "zh"}
+
+    if "name" in data:
+        val = str(data["name"]).strip()
+        if len(val) > 100:
+            return jsonify(error="Name must be 100 characters or less"), 400
+        u.name = val or None
+
+    if "phone" in data:
+        val = str(data["phone"]).strip()
+        if len(val) > 30:
+            return jsonify(error="Phone must be 30 characters or less"), 400
+        u.phone = val or None
+
+    if "language" in data:
+        val = str(data["language"]).strip().lower()
+        if val not in allowed_langs:
+            return jsonify(error=f"Language must be one of: {', '.join(sorted(allowed_langs))}"), 400
+        u.language = val
+
+    db.session.commit()
+    return jsonify(
+        id=str(u.id),
+        email=u.email,
+        name=u.name,
+        phone=u.phone,
         role=u.role,
         language=u.language,
         auth_provider=u.auth_provider,

@@ -1,5 +1,6 @@
 """테스트용 시드 데이터 삽입 스크립트"""
 
+import bcrypt
 from datetime import datetime, timezone, timedelta
 
 from dotenv import load_dotenv
@@ -8,6 +9,8 @@ load_dotenv()
 
 from app import create_app, db
 from app.models import User, Shop, Menu, Booking, Payment
+
+DEFAULT_PW = bcrypt.hashpw("Glow2026!".encode(), bcrypt.gensalt()).decode()
 
 app = create_app()
 
@@ -23,6 +26,7 @@ with app.app_context():
     # --- Users ---
     owner1 = User(
         email="owner1@glowtrip.com",
+        password_hash=DEFAULT_PW,
         name="김원장",
         auth_provider="email",
         role="owner",
@@ -30,6 +34,7 @@ with app.app_context():
     )
     owner2 = User(
         email="owner2@glowtrip.com",
+        password_hash=DEFAULT_PW,
         name="박원장",
         auth_provider="email",
         role="owner",
@@ -37,14 +42,15 @@ with app.app_context():
     )
     customer1 = User(
         email="sakura@example.com",
+        password_hash=DEFAULT_PW,
         name="Sakura Tanaka",
-        auth_provider="google",
-        provider_id="google_123",
+        auth_provider="email",
         role="customer",
         language="ja",
     )
     customer2 = User(
         email="emma@example.com",
+        password_hash=DEFAULT_PW,
         name="Emma Wilson",
         auth_provider="email",
         role="customer",
@@ -52,6 +58,7 @@ with app.app_context():
     )
     customer3 = User(
         email="xiaoming@example.com",
+        password_hash=DEFAULT_PW,
         name="李小明",
         auth_provider="email",
         role="customer",
@@ -59,6 +66,7 @@ with app.app_context():
     )
     admin = User(
         email="admin@glowtrip.com",
+        password_hash=DEFAULT_PW,
         name="관리자",
         auth_provider="email",
         role="admin",

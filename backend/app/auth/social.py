@@ -17,9 +17,13 @@ def _find_or_create_user(email, provider, provider_id, name=None, language="en")
     if user:
         return user
 
-    # 같은 이메일로 이미 가입된 경우 (다른 provider)
+    # 같은 이메일로 이미 가입된 경우 → 계정 연결
     user = User.query.filter_by(email=email).first()
     if user:
+        if user.auth_provider == "email" and not user.provider_id:
+            user.auth_provider = provider
+            user.provider_id = provider_id
+            db.session.commit()
         return user
 
     user = User(
@@ -142,6 +146,58 @@ def line_login():
     line_user_id = profile.get("userId", "")
 
     # LINE은 이메일을 기본 제공하지 않으므로 placeholder 사용
+    email = data.get("email") or f"{line_user_id}@line.placeholder"
+
+    user = _find_or_create_user(
+        email=email,
+        provider="line",
+        provider_id=line_user_id,
+        name=profile.get("displayName"),
+        language=data.get("language", "ja"),
+    )
+    tokens = create_tokens(user.id)
+    return jsonify(user_id=str(user.id), **tokens), 200
+
+
+# ── LINE OAuth code → token exchange ─────────────────────
+@social_bp.route("/line/exchange", methods=["POST"])
+def line_exchange():
+    """프론트엔드에서 LINE OAuth redirect로 받은 code를 access_token으로 교환."""
+    data = request.get_json() or {}
+    code = data.get("code", "")
+    redirect_uri = data.get("redirect_uri", "")
+    if not code:
+        return jsonify(error="code is required"), 400
+
+    # code → access_token 교환
+    resp = requests.post(
+        "https://api.line.me/oauth2/v2.1/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": redirect_uri,
+            "client_id": current_app.config["LINE_CHANNEL_ID"],
+            "client_secret": current_app.config["LINE_CHANNEL_SECRET"],
+        },
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return jsonify(error="LINE token exchange failed"), 401
+
+    token_data = resp.json()
+    access_token = token_data.get("access_token", "")
+
+    # 프로필 조회
+    profile_resp = requests.get(
+        "https://api.line.me/v2/profile",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=5,
+    )
+    if profile_resp.status_code != 200:
+        return jsonify(error="Failed to fetch LINE profile"), 401
+
+    profile = profile_resp.json()
+    line_user_id = profile.get("userId", "")
     email = data.get("email") or f"{line_user_id}@line.placeholder"
 
     user = _find_or_create_user(

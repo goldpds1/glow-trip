@@ -144,11 +144,20 @@
 
 ## Phase 16: 사용자 경험 개선
 
-- [ ] 프로필 수정 API 및 UI (이름, 전화번호, 언어)
-- [ ] 즐겨찾기 백엔드 + UI 연결 (관심 샵 저장)
-- [ ] 샵 필터/정렬 확장 (가격대, 평점순, 거리순 조합)
+- [x] 프로필 수정 API (PATCH /api/auth/me) 및 마이페이지 편집 UI (이름, 전화번호, 언어)
+- [x] 즐겨찾기 백엔드 (favorites 테이블 + 토글/목록/확인 API) + UI 연결 (하트 버튼, 마이페이지 섹션)
+- [x] 샵 필터/정렬 확장 (가격대, 최소 평점 필터 + 평점순/가격순 정렬 + 필터 UI)
 
-## Phase 17: 네이티브 앱 패키징
+## Phase 17: 소셜 로그인 구현
+
+- [x] Google Sign-In 연동 (GSI 스크립트 로드, client_id 환경변수, ID 토큰 검증)
+- [x] Apple Sign-In 연동 (Apple JS SDK, client_id 설정, ID 토큰 검증)
+- [x] LINE Login 연동 (OAuth 리다이렉트, channel_id/secret 설정, 토큰 교환)
+- [x] 프론트엔드 소셜 로그인 버튼 — SDK 로드 + client_id를 백엔드 config API에서 동적 주입
+- [x] 소셜 로그인 후 기존 이메일 계정 연결 (동일 이메일 시 병합 처리)
+- [x] 테스트 작성 (19개 — config API, Google/Apple/LINE 로그인, LINE exchange, 계정 병합)
+
+## Phase 18: 네이티브 앱 패키징 ⏳ (모든 기능 확인 후 최종 단계에서 일괄 진행)
 
 - [ ] Android WebView 앱 빌드
 - [ ] iOS WebView 앱 빌드

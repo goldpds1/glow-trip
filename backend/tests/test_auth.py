@@ -93,3 +93,46 @@ def test_refresh_token(client, customer):
     assert res.status_code == 200
     data = res.get_json()
     assert "access_token" in data
+
+
+# ── Profile update tests ────────────────────────────────
+
+
+def test_update_profile_full(client, customer_headers):
+    res = client.patch("/api/auth/me", headers=customer_headers, json={
+        "name": "Updated Name",
+        "phone": "010-1234-5678",
+        "language": "ko",
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["name"] == "Updated Name"
+    assert data["phone"] == "010-1234-5678"
+    assert data["language"] == "ko"
+
+
+def test_update_profile_partial(client, customer_headers):
+    res = client.patch("/api/auth/me", headers=customer_headers, json={
+        "name": "Only Name",
+    })
+    assert res.status_code == 200
+    assert res.get_json()["name"] == "Only Name"
+
+
+def test_update_profile_invalid_language(client, customer_headers):
+    res = client.patch("/api/auth/me", headers=customer_headers, json={
+        "language": "fr",
+    })
+    assert res.status_code == 400
+
+
+def test_update_profile_name_too_long(client, customer_headers):
+    res = client.patch("/api/auth/me", headers=customer_headers, json={
+        "name": "x" * 101,
+    })
+    assert res.status_code == 400
+
+
+def test_update_profile_no_auth(client):
+    res = client.patch("/api/auth/me", json={"name": "Hacker"})
+    assert res.status_code == 401

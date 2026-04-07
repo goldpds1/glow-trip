@@ -6,5 +6,6 @@ from app.models.payment import Payment
 from app.models.review import Review
 from app.models.business_hour import BusinessHour
 from app.models.notification import Notification
+from app.models.favorite import Favorite
 
-__all__ = ["User", "Shop", "Menu", "Booking", "Payment", "Review", "BusinessHour", "Notification"]
+__all__ = ["User", "Shop", "Menu", "Booking", "Payment", "Review", "BusinessHour", "Notification", "Favorite"]
