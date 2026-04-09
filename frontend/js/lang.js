@@ -167,6 +167,39 @@ const I18N = {
     scheduleSaved: '스케줄이 저장되었습니다',
     favAdded: '관심 목록에 추가되었습니다',
     favRemoved: '관심 목록에서 제거되었습니다',
+    // Region
+    region: '지역',
+    allRegions: '전체 지역',
+    region_seoul: '서울',
+    region_busan: '부산',
+    region_jeju: '제주',
+    region_incheon: '인천',
+    region_daegu: '대구',
+    region_gyeongju: '경주',
+    region_gangneung: '강릉',
+    region_jeonju: '전주',
+    region_sokcho: '속초',
+    region_yeosu: '여수',
+    // Business hours
+    businessHours: '영업시간',
+    dayMon: '월',
+    dayTue: '화',
+    dayWed: '수',
+    dayThu: '목',
+    dayFri: '금',
+    daySat: '토',
+    daySun: '일',
+    // Booking detail
+    bookingDetail: '예약 상세',
+    customer: '고객',
+    bookingTime: '예약 시간',
+    status: '상태',
+    originalRequest: '원문 요청',
+    close: '닫기',
+    // Booking errors
+    err_shop_closed: '선택한 시간에 영업하지 않습니다',
+    err_past_time: '지난 시간은 예약할 수 없습니다',
+    err_slot_unavailable: '이미 예약된 시간입니다',
     // Profile
     editProfile: '프로필 수정',
     profileName: '이름',
@@ -402,6 +435,39 @@ const I18N = {
     scheduleSaved: 'Schedule saved',
     favAdded: 'Added to favorites',
     favRemoved: 'Removed from favorites',
+    // Region
+    region: 'Region',
+    allRegions: 'All Regions',
+    region_seoul: 'Seoul',
+    region_busan: 'Busan',
+    region_jeju: 'Jeju',
+    region_incheon: 'Incheon',
+    region_daegu: 'Daegu',
+    region_gyeongju: 'Gyeongju',
+    region_gangneung: 'Gangneung',
+    region_jeonju: 'Jeonju',
+    region_sokcho: 'Sokcho',
+    region_yeosu: 'Yeosu',
+    // Business hours
+    businessHours: 'Business Hours',
+    dayMon: 'Mon',
+    dayTue: 'Tue',
+    dayWed: 'Wed',
+    dayThu: 'Thu',
+    dayFri: 'Fri',
+    daySat: 'Sat',
+    daySun: 'Sun',
+    // Booking detail
+    bookingDetail: 'Booking Detail',
+    customer: 'Customer',
+    bookingTime: 'Booking Time',
+    status: 'Status',
+    originalRequest: 'Original Request',
+    close: 'Close',
+    // Booking errors
+    err_shop_closed: 'The shop is closed at the selected time',
+    err_past_time: 'Cannot book a time in the past',
+    err_slot_unavailable: 'This time slot is already booked',
     // Profile
     editProfile: 'Edit Profile',
     profileName: 'Name',
@@ -637,6 +703,39 @@ const I18N = {
     scheduleSaved: 'スケジュールが保存されました',
     favAdded: 'お気に入りに追加しました',
     favRemoved: 'お気に入りから削除しました',
+    // Region
+    region: '地域',
+    allRegions: 'すべての地域',
+    region_seoul: 'ソウル',
+    region_busan: '釜山',
+    region_jeju: '済州',
+    region_incheon: '仁川',
+    region_daegu: '大邱',
+    region_gyeongju: '慶州',
+    region_gangneung: '江陵',
+    region_jeonju: '全州',
+    region_sokcho: '束草',
+    region_yeosu: '麗水',
+    // Business hours
+    businessHours: '営業時間',
+    dayMon: '月',
+    dayTue: '火',
+    dayWed: '水',
+    dayThu: '木',
+    dayFri: '金',
+    daySat: '土',
+    daySun: '日',
+    // Booking detail
+    bookingDetail: '予約詳細',
+    customer: 'お客様',
+    bookingTime: '予約日時',
+    status: 'ステータス',
+    originalRequest: 'リクエスト原文',
+    close: '閉じる',
+    // Booking errors
+    err_shop_closed: '選択した時間は営業時間外です',
+    err_past_time: '過去の時間は予約できません',
+    err_slot_unavailable: 'この時間はすでに予約済みです',
     // Profile
     editProfile: 'プロフィール編集',
     profileName: '名前',
@@ -872,6 +971,39 @@ const I18N = {
     scheduleSaved: '日程已保存',
     favAdded: '已添加到收藏',
     favRemoved: '已从收藏中移除',
+    // Region
+    region: '地区',
+    allRegions: '所有地区',
+    region_seoul: '首尔',
+    region_busan: '釜山',
+    region_jeju: '济州',
+    region_incheon: '仁川',
+    region_daegu: '大邱',
+    region_gyeongju: '庆州',
+    region_gangneung: '江陵',
+    region_jeonju: '全州',
+    region_sokcho: '束草',
+    region_yeosu: '丽水',
+    // Business hours
+    businessHours: '营业时间',
+    dayMon: '一',
+    dayTue: '二',
+    dayWed: '三',
+    dayThu: '四',
+    dayFri: '五',
+    daySat: '六',
+    daySun: '日',
+    // Booking detail
+    bookingDetail: '预约详情',
+    customer: '顾客',
+    bookingTime: '预约时间',
+    status: '状态',
+    originalRequest: '原文请求',
+    close: '关闭',
+    // Booking errors
+    err_shop_closed: '所选时间店铺未营业',
+    err_past_time: '无法预约过去的时间',
+    err_slot_unavailable: '该时间段已被预约',
     // Profile
     editProfile: '编辑资料',
     profileName: '姓名',
@@ -954,6 +1086,47 @@ const I18N = {
   },
 };
 
+Object.assign(I18N.ko, {
+  recentViewed: '최근 본 샵',
+  noRecentViewed: '최근 본 샵이 없습니다',
+  reschedule: '일정변경',
+  addToCalendar: '캘린더',
+  rebook: '재예약',
+  downloadFailed: '다운로드에 실패했습니다',
+  reschedulePrompt: '새 예약 시간을 입력하세요 (예: 2026-04-20T14:00:00+09:00)',
+  rescheduled: '예약 시간이 변경되었습니다',
+});
+Object.assign(I18N.en, {
+  recentViewed: 'Recently Viewed',
+  noRecentViewed: 'No recently viewed shops',
+  reschedule: 'Reschedule',
+  addToCalendar: 'Calendar',
+  rebook: 'Rebook',
+  downloadFailed: 'Failed to download file',
+  reschedulePrompt: 'Enter new booking time (e.g. 2026-04-20T14:00:00+09:00)',
+  rescheduled: 'Booking time updated',
+});
+Object.assign(I18N.ja, {
+  recentViewed: '最近見たショップ',
+  noRecentViewed: '最近見たショップはありません',
+  reschedule: '日程変更',
+  addToCalendar: 'カレンダー',
+  rebook: '再予約',
+  downloadFailed: 'ダウンロードに失敗しました',
+  reschedulePrompt: '新しい予約時刻を入力してください（例: 2026-04-20T14:00:00+09:00）',
+  rescheduled: '予約時間を変更しました',
+});
+Object.assign(I18N.zh, {
+  recentViewed: '最近浏览',
+  noRecentViewed: '暂无最近浏览店铺',
+  reschedule: '改期',
+  addToCalendar: '日历',
+  rebook: '再次预约',
+  downloadFailed: '下载失败',
+  reschedulePrompt: '请输入新的预约时间（例: 2026-04-20T14:00:00+09:00）',
+  rescheduled: '预约时间已更新',
+});
+
 // ── Get / Set Language ─────────────────────────────────
 function getLang() {
   return localStorage.getItem('glow_lang') || 'ko';
@@ -969,12 +1142,16 @@ function t(key) {
 }
 
 // ── Render Language Selector ───────────────────────────
-function renderLangSelector(containerId) {
+function renderLangSelector(containerId, variant = 'default') {
   const container = document.getElementById(containerId);
   if (!container) return;
   const current = getLang();
+  const wrap = document.createElement('div');
+  wrap.className = 'lang-selector-wrap';
+  if (variant === 'compact') wrap.classList.add('compact');
   const select = document.createElement('select');
   select.className = 'lang-selector';
+  if (variant === 'compact') select.classList.add('compact');
   for (const [code, info] of Object.entries(LANGS)) {
     const opt = document.createElement('option');
     opt.value = code;
@@ -987,7 +1164,8 @@ function renderLangSelector(containerId) {
     location.reload();
   });
   container.innerHTML = '';
-  container.appendChild(select);
+  wrap.appendChild(select);
+  container.appendChild(wrap);
 }
 
 // ── Apply i18n to DOM ──────────────────────────────────

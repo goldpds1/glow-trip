@@ -26,6 +26,11 @@ function pageFromPath(path) {
 
 // ── Navigation ──────────────────────────────────────────
 function navigate(page, pushState = true) {
+  // Auth guard: redirect to login for protected pages
+  if (!getToken() && typeof AUTH_REQUIRED_PAGES !== 'undefined' && AUTH_REQUIRED_PAGES.includes(page)) {
+    navigate('auth', pushState);
+    return;
+  }
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const el = document.getElementById('page-' + page);
   if (el) el.classList.add('active');
@@ -39,11 +44,13 @@ function navigate(page, pushState = true) {
 
   // header
   const backBtn = document.getElementById('backBtn');
+  const homeBtn = document.getElementById('homeBtn');
   const title = document.getElementById('headerTitle');
   const nav = document.getElementById('bottomNav');
 
   if (page === 'auth') {
     backBtn.classList.add('hidden');
+    homeBtn.classList.add('hidden');
     nav.style.display = 'none';
     title.textContent = 'Glow Trip';
   } else {
@@ -51,15 +58,13 @@ function navigate(page, pushState = true) {
     document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
     const navEl = document.getElementById('nav-' + page);
     if (navEl) navEl.classList.add('active');
-    // Map bookings to home nav highlight
     if (page === 'home') document.getElementById('nav-home')?.classList.add('active');
   }
 
-  if (['shop-detail', 'booking', 'booking-complete', 'payment', 'shops'].includes(page)) {
-    backBtn.classList.remove('hidden');
-  } else {
-    backBtn.classList.add('hidden');
-  }
+  const hasBack = ['shop-detail', 'booking', 'booking-complete', 'payment', 'shops'].includes(page);
+  backBtn.classList.toggle('hidden', !hasBack);
+  // Show home icon when not on home/auth, and back button is not showing
+  homeBtn.classList.toggle('hidden', page === 'home' || page === 'auth' || hasBack);
 
   // page-specific load
   if (page === 'home') { title.textContent = 'Glow Trip'; loadHome(); }
@@ -69,13 +74,15 @@ function navigate(page, pushState = true) {
 }
 
 // ── Browser back/forward ───────────────────────────────
+const AUTH_REQUIRED_PAGES = ['booking', 'bookings', 'mypage', 'payment', 'booking-complete'];
+
 window.addEventListener('popstate', (e) => {
-  if (e.state?.page) {
-    navigate(e.state.page, false);
-  } else {
-    const page = pageFromPath(location.pathname);
-    if (page) navigate(page, false);
+  const target = e.state?.page || pageFromPath(location.pathname);
+  if (!getToken() && AUTH_REQUIRED_PAGES.includes(target)) {
+    navigate('auth', false);
+    return;
   }
+  if (target) navigate(target, false);
 });
 
 function goBack() {
@@ -138,7 +145,7 @@ async function doRegister() {
 
 function doLogout() {
   clearTokens();
-  navigate('auth');
+  navigate('home');
 }
 
 // ── Social Config (loaded from backend) ───────────────
@@ -278,12 +285,32 @@ async function handleLineCallback() {
 
 // ── Home ────────────────────────────────────────────────
 const CATEGORIES = ['skincare', 'massage', 'facial', 'waxing', 'body'];
+const REGIONS = ['seoul', 'busan', 'jeju', 'incheon', 'daegu', 'gyeongju', 'gangneung', 'jeonju', 'sokcho', 'yeosu'];
 let selectedCategory = '';
+let selectedRegion = '';
 
 async function loadHome() {
+  renderRegions();
   renderCategories();
   loadPopularShops();
+  loadRecentViewedShops();
   loadHomeGrid();
+}
+
+function renderRegions() {
+  const container = document.getElementById('regionTags');
+  if (!container) return;
+  container.innerHTML = `<span class="category-tag ${!selectedRegion ? 'active' : ''}" onclick="selectRegion('')">${t('allRegions')}</span>` +
+    REGIONS.map(r =>
+      `<span class="category-tag ${selectedRegion === r ? 'active' : ''}" onclick="selectRegion('${r}')">${t('region_' + r) || r}</span>`
+    ).join('');
+}
+
+function selectRegion(r) {
+  selectedRegion = r;
+  renderRegions();
+  loadHomeGrid();
+  loadPopularShops();
 }
 
 function renderCategories() {
@@ -301,7 +328,9 @@ function selectCategory(cat) {
 }
 
 async function loadPopularShops() {
-  const res = await get('/shops?per_page=10&sort=popular');
+  let popQs = '/shops?per_page=10&sort=popular';
+  if (selectedRegion) popQs += `&region=${selectedRegion}`;
+  const res = await get(popQs);
   const data = await res.json();
   const container = document.getElementById('popularShopsScroll');
   if (!data.shops.length) { container.innerHTML = ''; return; }
@@ -318,6 +347,7 @@ async function loadPopularShops() {
 
 async function loadHomeGrid() {
   let qs = '?per_page=10';
+  if (selectedRegion) qs += `&region=${selectedRegion}`;
   if (selectedCategory) qs += `&category=${selectedCategory}`;
   const res = await get('/shops' + qs);
   const data = await res.json();
@@ -331,6 +361,37 @@ async function loadHomeGrid() {
       <div class="sg-name">${esc(s.name)}</div>
       ${s.avg_rating ? `<div class="sg-rating">&#9733; ${s.avg_rating} (${s.review_count || 0})</div>` : ''}
       ${s.min_price ? `<div class="sg-price">${formatPrice(s.min_price)}~</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function saveRecentShop(shop) {
+  try {
+    const key = 'gt_recent_shops';
+    const prev = JSON.parse(localStorage.getItem(key) || '[]');
+    const next = [shop, ...prev.filter(x => x.id !== shop.id)].slice(0, 8);
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch (_) {}
+}
+
+function loadRecentViewedShops() {
+  const container = document.getElementById('recentShopsScroll');
+  if (!container) return;
+  let items = [];
+  try {
+    items = JSON.parse(localStorage.getItem('gt_recent_shops') || '[]');
+  } catch (_) { items = []; }
+  if (!items.length) {
+    container.innerHTML = `<div class="loading" style="padding:8px 0">${t('noRecentViewed')}</div>`;
+    return;
+  }
+  container.innerHTML = items.map(s => `
+    <div class="h-card" onclick="openShop('${s.id}')">
+      ${s.image_url
+        ? `<img class="h-card-img" src="${s.image_url}">`
+        : `<div class="h-card-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">&#10024;</div>`}
+      <div class="h-card-name">${esc(s.name)}</div>
+      <div class="h-card-sub">${s.min_price ? t('fromPrice') + ' ' + formatPrice(s.min_price) : ''}</div>
     </div>
   `).join('');
 }
@@ -478,8 +539,11 @@ async function loadShops() {
         <div class="sv-name">${esc(s.name)}</div>
         <div class="sv-addr">${esc(s.address || '')}${s.distance_km != null ? ` · ${s.distance_km}${t('km')}` : ''}</div>
         <div class="sv-meta">
-          ${s.avg_rating ? `<span class="sv-rating">&#9733; ${s.avg_rating} (${s.review_count || 0})</span>` : ''}
-          ${s.min_price ? `<span class="sv-price">${formatPrice(s.min_price)}~</span>` : ''}
+          ${s.avg_rating ? `<span class="sv-rating-line"><span style="color:var(--warning)">&#9733;</span> ${s.avg_rating} (${s.review_count || 0} ${t('reviewCount')})</span>` : ''}
+        </div>
+        <div class="sv-bottom">
+          ${s.min_price ? `<span class="sv-price">${formatPrice(s.min_price)}~</span>` : '<span></span>'}
+          <button class="btn btn-book sv-book-btn" onclick="event.stopPropagation();openShop('${s.id}')">${t('bookNow')}</button>
         </div>
       </div>
     </div>
@@ -488,9 +552,37 @@ async function loadShops() {
   if (shopViewMode === 'map') renderShopMap(data.shops);
 }
 
+function renderBusinessHours(hours) {
+  if (!hours || !hours.length) return '';
+  const dayKeys = ['dayMon','dayTue','dayWed','dayThu','dayFri','daySat','daySun'];
+  const rows = [];
+  for (let d = 0; d < 7; d++) {
+    const h = hours.find(x => x.day_of_week === d);
+    const label = t(dayKeys[d]);
+    if (!h) {
+      rows.push(`<span style="color:var(--text-light)">${label} 10:00-20:00</span>`);
+    } else if (h.is_closed) {
+      rows.push(`<span style="color:var(--text-light)">${label} <em>${t('closed')}</em></span>`);
+    } else {
+      rows.push(`<span style="color:var(--text-light)">${label} ${h.open_time}-${h.close_time}</span>`);
+    }
+  }
+  return `
+    <div style="padding:12px 16px">
+      <h3 class="section-title">${t('businessHours')}</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px">${rows.join('')}</div>
+    </div>`;
+}
+
 async function openShop(id) {
   const res = await get('/shops/' + id);
   selectedShop = await res.json();
+  saveRecentShop({
+    id: selectedShop.id,
+    name: selectedShop.name,
+    image_url: selectedShop.image_url,
+    min_price: selectedShop.menus?.length ? Math.min(...selectedShop.menus.map(m => m.price || 0).filter(Boolean)) : null,
+  });
   document.getElementById('headerTitle').textContent = selectedShop.name;
 
   const hasCoords = selectedShop.latitude && selectedShop.longitude;
@@ -519,6 +611,8 @@ async function openShop(id) {
     </div>
 
     ${hasCoords ? `<div id="detailMap" style="height:180px;margin:0 16px;border-radius:12px;overflow:hidden"></div>` : ''}
+
+    ${renderBusinessHours(selectedShop.business_hours)}
 
     <div style="padding:16px">
       <h3 class="section-title">${t('menu')}</h3>
@@ -625,17 +719,19 @@ async function pickDate(dateStr) {
   const data = await res.json();
 
   if (data.closed) {
-    grid.innerHTML = `<div class="loading">${t('dayClosed')}</div>`;
+    grid.innerHTML = `<div class="slot-notice"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>${t('dayClosed')}</span></div>`;
+    showToast(t('dayClosed'));
     return;
   }
 
   if (!data.slots.length) {
-    grid.innerHTML = `<div class="loading">${t('noSlots')}</div>`;
+    grid.innerHTML = `<div class="slot-notice"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.5" fill="var(--warning)"/></svg><span>${t('noSlots')}</span></div>`;
+    showToast(t('noSlots'));
     return;
   }
 
   grid.innerHTML = data.slots.map(s =>
-    `<div class="slot-item ${s.available ? '' : 'unavailable'} ${selectedSlot === s.time ? 'active' : ''}"
+    `<div class="slot-item ${s.available ? '' : 'unavailable'} ${selectedSlot === s.time ? 'selected' : ''}"
           onclick="${s.available ? `pickSlot('${s.time}')` : ''}">${s.time}</div>`
   ).join('');
 }
@@ -646,7 +742,7 @@ function pickSlot(time) {
   document.getElementById('bookingTime').value = `${selectedDate}T${time}:00`;
   // Re-render slots to show active state
   document.querySelectorAll('.slot-item').forEach(el => {
-    el.classList.toggle('active', el.textContent.trim() === time);
+    el.classList.toggle('selected', el.textContent.trim() === time);
   });
 }
 
@@ -672,8 +768,10 @@ async function createBooking() {
   const res = await post('/bookings', body);
   const data = await res.json();
   if (!res.ok) {
-    errEl.textContent = data.error || t('bookingFailed');
+    const msg = data.code ? t('err_' + data.code) : (data.error || t('bookingFailed'));
+    errEl.innerHTML = `<div class="slot-notice"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span>${msg}</span></div>`;
     errEl.classList.remove('hidden');
+    showToast(msg);
     return;
   }
 
@@ -717,12 +815,15 @@ async function loadBookings() {
         <div class="card-sub">${formatDate(b.booking_time)}</div>
         ${b.request_original ? `<div class="card-sub mt-8" style="font-style:italic">"${esc(b.request_original)}"</div>` : ''}
         <div class="action-btns mt-8">
-          ${b.payment_status === 'pending' && b.status === 'pending' ? `
+          ${(b.payment_status === 'pending' || b.payment_status === 'failed') && (b.status === 'pending' || b.status === 'confirmed') ? `
             <button class="btn btn-primary btn-sm" onclick="startPayment('${b.id}','${esc(b.menu_title)}',${b.amount || 0})">${t('pay')}</button>
           ` : ''}
           ${b.status === 'pending' || b.status === 'confirmed' ? `
             <button class="btn btn-danger btn-sm" onclick="cancelBooking('${b.id}')">${t('cancel')}</button>
+            <button class="btn btn-outline btn-sm" onclick="rescheduleBooking('${b.id}')">${t('reschedule')}</button>
           ` : ''}
+          <button class="btn btn-outline btn-sm" onclick="downloadBookingIcs('${b.id}')">${t('addToCalendar')}</button>
+          <button class="btn btn-outline btn-sm" onclick="quickRebook('${b.shop_id}','${b.menu_id}')">${t('rebook')}</button>
           ${b.status === 'completed' && !b.has_review ? `
             <button class="btn btn-outline btn-sm" onclick="document.getElementById('reviewForm-${b.id}').classList.toggle('hidden')">${t('writeReview')}</button>
           ` : ''}
@@ -754,6 +855,45 @@ async function cancelBooking(id) {
   if (!confirm(t('confirmCancel'))) return;
   const res = await post('/bookings/' + id + '/cancel');
   if (res.ok) loadBookings();
+}
+
+async function downloadBookingIcs(bookingId) {
+  const token = getToken();
+  if (!token) return;
+  const url = `${API}/bookings/${bookingId}/ics`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return alert(t('downloadFailed'));
+  const blob = await res.blob();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `booking-${bookingId}.ics`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
+async function quickRebook(shopId, menuId) {
+  try {
+    await openShop(shopId);
+    if (selectedShop?.menus?.some(m => m.id === menuId)) {
+      selectMenu(menuId);
+    } else {
+      selectFirstMenu();
+    }
+  } catch (_) {
+    alert(t('bookingFailed'));
+  }
+}
+
+async function rescheduleBooking(bookingId) {
+  const val = prompt(t('reschedulePrompt') || 'Enter new datetime (YYYY-MM-DDTHH:MM:SS+09:00)');
+  if (!val) return;
+  const res = await post(`/bookings/${bookingId}/reschedule`, { booking_time: val });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error || t('bookingFailed'));
+  showToast(t('rescheduled'));
+  loadBookings();
 }
 
 // ── My Page ─────────────────────────────────────────────
@@ -793,7 +933,6 @@ function renderProfileView() {
 function showEditProfile() {
   document.getElementById('editName').value = myProfileData.name || '';
   document.getElementById('editPhone').value = myProfileData.phone || '';
-  document.getElementById('editLang').value = myProfileData.language || 'en';
   document.getElementById('profileEditForm').classList.remove('hidden');
 }
 
@@ -805,7 +944,7 @@ async function saveProfile() {
   const body = {
     name: document.getElementById('editName').value.trim(),
     phone: document.getElementById('editPhone').value.trim(),
-    language: document.getElementById('editLang').value,
+    language: currentLang || 'en',
   };
   const res = await patch('/auth/me', body);
   if (res.ok) {
@@ -837,8 +976,11 @@ async function loadFavorites() {
         <div class="sv-name">${esc(s.name)}</div>
         <div class="sv-addr">${esc(s.address || '')}</div>
         <div class="sv-meta">
-          ${s.avg_rating ? `<span class="sv-rating">&#9733; ${s.avg_rating} (${s.review_count || 0})</span>` : ''}
-          ${s.min_price ? `<span class="sv-price">${formatPrice(s.min_price)}~</span>` : ''}
+          ${s.avg_rating ? `<span class="sv-rating-line"><span style="color:var(--warning)">&#9733;</span> ${s.avg_rating} (${s.review_count || 0} ${t('reviewCount')})</span>` : ''}
+        </div>
+        <div class="sv-bottom">
+          ${s.min_price ? `<span class="sv-price">${formatPrice(s.min_price)}~</span>` : '<span></span>'}
+          <button class="btn btn-book sv-book-btn" onclick="event.stopPropagation();openShop('${s.id}')">${t('bookNow')}</button>
         </div>
       </div>
     </div>
@@ -1012,7 +1154,7 @@ function formatDate(iso) {
 
 // ── Init ────────────────────────────────────────────────
 (function init() {
-  renderLangSelector('headerLang');
+  renderLangSelector('headerLang', 'compact');
   applyI18n();
   loadSocialConfig();
 
@@ -1023,12 +1165,11 @@ function formatDate(iso) {
     return;
   }
 
-  if (!getToken()) {
+  const page = pageFromPath(location.pathname);
+  if (!getToken() && AUTH_REQUIRED_PAGES.includes(page)) {
     navigate('auth', true);
     return;
   }
-
-  const page = pageFromPath(location.pathname);
   if (page && page !== 'auth') {
     navigate(page, false);
     history.replaceState({ page }, '', ROUTE_MAP[page]);

@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, time as dt_time
 
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import Booking, Shop, Menu, Payment, Review
+from app.models import Booking, Shop, Menu, Payment, Review, SlotHold, BusinessHour, SpecialSchedule
 from app.auth.decorators import login_required
 from app.services.translator import translate_to_korean
 from app.services import notification as notif_service
@@ -30,6 +30,44 @@ def _booking_to_dict(b, include_translation=False):
         d["amount"] = b.payment.amount
     d["has_review"] = Review.query.filter_by(booking_id=b.id).first() is not None
     return d
+
+
+def _is_shop_open_at(shop_id, when_dt):
+    date = when_dt.date()
+    dow = date.weekday()
+    bh = BusinessHour.query.filter_by(shop_id=shop_id, day_of_week=dow).first()
+    special = SpecialSchedule.query.filter_by(shop_id=shop_id, date=date).first()
+
+    if special and special.is_closed:
+        return False
+    if bh and bh.is_closed and not special:
+        return False
+
+    open_t = special.open_time if (special and special.open_time) else (bh.open_time if bh else dt_time(10, 0))
+    close_t = special.close_time if (special and special.close_time) else (bh.close_time if bh else dt_time(20, 0))
+    cur_t = when_dt.time()
+    return open_t <= cur_t < close_t
+
+
+def _slot_conflict(shop_id, when_dt, user_id=None, exclude_booking_id=None):
+    q = Booking.query.filter(
+        Booking.shop_id == shop_id,
+        Booking.booking_time == when_dt,
+        Booking.status.in_(["pending", "confirmed"]),
+    )
+    if exclude_booking_id:
+        q = q.filter(Booking.id != exclude_booking_id)
+    if q.first():
+        return True
+
+    hold = SlotHold.query.filter(
+        SlotHold.shop_id == shop_id,
+        SlotHold.slot_time == when_dt,
+        SlotHold.expires_at > datetime.utcnow(),
+    ).first()
+    if hold and (not user_id or str(hold.user_id) != str(user_id)):
+        return True
+    return False
 
 
 # ── 예약 생성 (고객) ─────────────────────────────────────
@@ -61,7 +99,11 @@ def create_booking():
         return jsonify(error="Invalid booking_time format (ISO 8601)"), 400
 
     if booking_time < datetime.now(timezone.utc):
-        return jsonify(error="Cannot book in the past"), 400
+        return jsonify(error="Cannot book in the past", code="past_time"), 400
+    if not _is_shop_open_at(shop.id, booking_time):
+        return jsonify(error="Shop is closed at selected time", code="shop_closed"), 400
+    if _slot_conflict(shop.id, booking_time, user_id=user.id):
+        return jsonify(error="Slot is not available", code="slot_unavailable"), 409
 
     # AI 번역 (요청사항이 있을 때만)
     translated = None
@@ -88,6 +130,13 @@ def create_booking():
         payment_status="pending",
     )
     db.session.add(payment)
+
+    # Release own slot hold if exists
+    SlotHold.query.filter_by(
+        shop_id=shop.id,
+        user_id=user.id,
+        slot_time=booking_time,
+    ).delete()
     db.session.commit()
 
     notif_service.notify_owner(booking, "booking_created")
@@ -165,3 +214,92 @@ def cancel_booking(booking_id):
     notif_service.notify_owner(booking, "booking_cancelled")
 
     return jsonify(id=str(booking.id), status=booking.status), 200
+
+
+@bookings_bp.route("/<booking_id>/reschedule", methods=["POST"])
+@login_required
+def reschedule_booking(booking_id):
+    user = g.current_user
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify(error="Booking not found"), 404
+    if str(booking.user_id) != str(user.id):
+        return jsonify(error="Forbidden"), 403
+    if booking.status not in ("pending", "confirmed"):
+        return jsonify(error="Only pending/confirmed bookings can be rescheduled"), 400
+
+    data = request.get_json() or {}
+    new_time_str = data.get("booking_time", "")
+    if not new_time_str:
+        return jsonify(error="booking_time is required"), 400
+
+    try:
+        new_time = datetime.fromisoformat(new_time_str)
+    except ValueError:
+        return jsonify(error="Invalid booking_time format (ISO 8601)"), 400
+
+    if new_time < datetime.now(timezone.utc):
+        return jsonify(error="Cannot reschedule to past"), 400
+    if not _is_shop_open_at(booking.shop_id, new_time):
+        return jsonify(error="Shop is closed at selected time", code="shop_closed"), 400
+    if _slot_conflict(booking.shop_id, new_time, user_id=user.id, exclude_booking_id=booking.id):
+        return jsonify(error="Slot is not available"), 409
+
+    booking.booking_time = new_time
+    if "request_original" in data:
+        req = str(data.get("request_original") or "").strip()
+        booking.request_original = req or None
+        booking.request_translated = translate_to_korean(req) if req else None
+
+    db.session.commit()
+    return jsonify(
+        id=str(booking.id),
+        booking_time=booking.booking_time.isoformat(),
+        status=booking.status,
+    ), 200
+
+
+@bookings_bp.route("/<booking_id>/ics", methods=["GET"])
+@login_required
+def booking_ics(booking_id):
+    booking = Booking.query.get(booking_id)
+    if not booking:
+        return jsonify(error="Booking not found"), 404
+
+    user = g.current_user
+    if str(booking.user_id) != str(user.id) and str(booking.shop.owner_id) != str(user.id):
+        return jsonify(error="Forbidden"), 403
+
+    start_utc = booking.booking_time.astimezone(timezone.utc)
+    end_utc = (booking.booking_time + timedelta(minutes=booking.menu.duration or 60)).astimezone(timezone.utc)
+    uid = f"{booking.id}@glowtrip"
+    dtstamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dtstart = start_utc.strftime("%Y%m%dT%H%M%SZ")
+    dtend = end_utc.strftime("%Y%m%dT%H%M%SZ")
+
+    summary = f"{booking.shop.name} - {booking.menu.title}"
+    description = booking.request_original or "Glow Trip booking"
+    location = booking.shop.address or ""
+
+    ics = (
+        "BEGIN:VCALENDAR\r\n"
+        "VERSION:2.0\r\n"
+        "PRODID:-//Glow Trip//Booking//EN\r\n"
+        "BEGIN:VEVENT\r\n"
+        f"UID:{uid}\r\n"
+        f"DTSTAMP:{dtstamp}\r\n"
+        f"DTSTART:{dtstart}\r\n"
+        f"DTEND:{dtend}\r\n"
+        f"SUMMARY:{summary}\r\n"
+        f"DESCRIPTION:{description}\r\n"
+        f"LOCATION:{location}\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR\r\n"
+    )
+
+    from flask import Response
+    return Response(
+        ics,
+        mimetype="text/calendar",
+        headers={"Content-Disposition": f'attachment; filename="booking-{booking.id}.ics"'},
+    )

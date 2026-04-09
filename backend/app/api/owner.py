@@ -3,7 +3,7 @@ from datetime import datetime, timezone, time as dt_time
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import Booking, Shop, Menu, Payment, BusinessHour
+from app.models import Booking, Shop, Menu, Payment, BusinessHour, SpecialSchedule
 from app.auth.decorators import role_required
 from app.services import notification as notif_service
 
@@ -48,7 +48,7 @@ def update_shop(shop_id):
         return jsonify(error="Shop not found or not yours"), 404
 
     data = request.get_json() or {}
-    allowed = ("name", "description", "address", "phone", "image_url", "category")
+    allowed = ("name", "description", "address", "phone", "image_url", "category", "region")
     for key in allowed:
         if key in data:
             setattr(shop, key, data[key])
@@ -363,3 +363,85 @@ def set_hours(shop_id):
 
     db.session.commit()
     return jsonify(message="Business hours updated"), 200
+
+
+@owner_bp.route("/shops/<shop_id>/special-schedules", methods=["GET"])
+@role_required("owner")
+def get_special_schedules(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Shop not found or not yours"), 404
+
+    q = SpecialSchedule.query.filter_by(shop_id=shop.id)
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+    if date_from:
+        try:
+            q = q.filter(SpecialSchedule.date >= datetime.strptime(date_from, "%Y-%m-%d").date())
+        except ValueError:
+            return jsonify(error="Invalid date_from format"), 400
+    if date_to:
+        try:
+            q = q.filter(SpecialSchedule.date <= datetime.strptime(date_to, "%Y-%m-%d").date())
+        except ValueError:
+            return jsonify(error="Invalid date_to format"), 400
+
+    items = q.order_by(SpecialSchedule.date.asc()).all()
+    return jsonify(
+        schedules=[
+            {
+                "id": str(s.id),
+                "date": s.date.isoformat(),
+                "open_time": s.open_time.strftime("%H:%M") if s.open_time else None,
+                "close_time": s.close_time.strftime("%H:%M") if s.close_time else None,
+                "is_closed": s.is_closed,
+                "note": s.note,
+            }
+            for s in items
+        ]
+    ), 200
+
+
+@owner_bp.route("/shops/<shop_id>/special-schedules", methods=["PUT"])
+@role_required("owner")
+def set_special_schedules(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or str(shop.owner_id) != str(g.current_user.id):
+        return jsonify(error="Shop not found or not yours"), 404
+
+    data = request.get_json() or {}
+    items = data.get("schedules", [])
+    if not isinstance(items, list):
+        return jsonify(error="schedules must be a list"), 400
+
+    for item in items:
+        date_str = item.get("date")
+        if not date_str:
+            continue
+        try:
+            d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+
+        is_closed = bool(item.get("is_closed", False))
+        open_time = None
+        close_time = None
+        if not is_closed:
+            try:
+                open_time = dt_time.fromisoformat(item.get("open_time", "10:00"))
+                close_time = dt_time.fromisoformat(item.get("close_time", "20:00"))
+            except (ValueError, TypeError):
+                open_time = dt_time(10, 0)
+                close_time = dt_time(20, 0)
+
+        row = SpecialSchedule.query.filter_by(shop_id=shop.id, date=d).first()
+        if not row:
+            row = SpecialSchedule(shop_id=shop.id, date=d)
+            db.session.add(row)
+        row.is_closed = is_closed
+        row.open_time = open_time
+        row.close_time = close_time
+        row.note = item.get("note")
+
+    db.session.commit()
+    return jsonify(message="Special schedules updated"), 200

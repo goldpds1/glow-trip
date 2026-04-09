@@ -3,7 +3,7 @@ import jwt as pyjwt
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import User
+from app.models import User, UserDevice
 from app.auth.jwt_utils import create_tokens, decode_token
 from app.auth.decorators import login_required
 
@@ -147,3 +147,45 @@ def update_me():
         language=u.language,
         auth_provider=u.auth_provider,
     ), 200
+
+
+@auth_bp.route("/push-token", methods=["POST"])
+@login_required
+def register_push_token():
+    data = request.get_json() or {}
+    token = (data.get("device_token") or "").strip()
+    platform = (data.get("platform") or "unknown").strip().lower()
+
+    if not token:
+        return jsonify(error="device_token is required"), 400
+
+    row = UserDevice.query.filter_by(device_token=token).first()
+    if not row:
+        row = UserDevice(
+            user_id=g.current_user.id,
+            device_token=token,
+            platform=platform[:20] if platform else "unknown",
+        )
+        db.session.add(row)
+    else:
+        row.user_id = g.current_user.id
+        row.platform = platform[:20] if platform else row.platform
+
+    db.session.commit()
+    return jsonify(registered=True), 200
+
+
+@auth_bp.route("/push-token", methods=["DELETE"])
+@login_required
+def unregister_push_token():
+    data = request.get_json() or {}
+    token = (data.get("device_token") or "").strip()
+    if not token:
+        return jsonify(error="device_token is required"), 400
+
+    UserDevice.query.filter_by(
+        user_id=g.current_user.id,
+        device_token=token,
+    ).delete()
+    db.session.commit()
+    return jsonify(removed=True), 200

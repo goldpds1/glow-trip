@@ -5,8 +5,8 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timedelta, time as dt_time
 
 from app import db
-from app.models import Shop, Menu, Review, Booking, BusinessHour
-from app.auth.decorators import login_required, role_required
+from app.models import Shop, Menu, Review, Booking, BusinessHour, SlotHold, SpecialSchedule
+from app.auth.decorators import login_required
 from app.utils import shop_avg_rating as _shop_avg_rating, shop_review_count as _shop_review_count, shop_min_price as _shop_min_price
 
 
@@ -40,6 +40,11 @@ def list_shops():
                 Shop.address.ilike(f"%{keyword}%"),
             )
         )
+
+    # 지역 필터
+    region = request.args.get("region", "").strip()
+    if region:
+        q = q.filter(Shop.region == region)
 
     # 카테고리 필터
     category = request.args.get("category", "").strip()
@@ -93,6 +98,7 @@ def list_shops():
             "longitude": s.longitude,
             "image_url": s.image_url,
             "category": s.category,
+            "region": s.region,
             "avg_rating": _shop_avg_rating(s.id),
             "review_count": _shop_review_count(s.id),
             "min_price": _shop_min_price(s.id),
@@ -176,6 +182,18 @@ def get_shop(shop_id):
         for m in shop.menus.filter_by(is_active=True).order_by(Menu.price.asc())
     ]
 
+    # Business hours
+    hours = BusinessHour.query.filter_by(shop_id=shop.id).order_by(BusinessHour.day_of_week).all()
+    business_hours = [
+        {
+            "day_of_week": h.day_of_week,
+            "open_time": h.open_time.strftime("%H:%M") if h.open_time else "10:00",
+            "close_time": h.close_time.strftime("%H:%M") if h.close_time else "20:00",
+            "is_closed": h.is_closed,
+        }
+        for h in hours
+    ]
+
     return jsonify(
         id=str(shop.id),
         name=shop.name,
@@ -185,10 +203,12 @@ def get_shop(shop_id):
         longitude=shop.longitude,
         phone=shop.phone,
         category=shop.category,
+        region=shop.region,
         image_url=shop.image_url,
         avg_rating=_shop_avg_rating(shop.id),
         review_count=_shop_review_count(shop.id),
         menus=menus,
+        business_hours=business_hours,
     ), 200
 
 
@@ -229,13 +249,16 @@ def list_slots(shop_id):
 
     dow = date.weekday()  # 0=Mon
     bh = BusinessHour.query.filter_by(shop_id=shop.id, day_of_week=dow).first()
+    special = SpecialSchedule.query.filter_by(shop_id=shop.id, date=date).first()
 
-    # Default: 10:00~20:00 if no business hours set
-    if bh and bh.is_closed:
+    # Special schedule overrides weekly business hours
+    if special and special.is_closed:
+        return jsonify(slots=[], date=date_str, closed=True), 200
+    if bh and bh.is_closed and not special:
         return jsonify(slots=[], date=date_str, closed=True), 200
 
-    open_t = bh.open_time if bh else dt_time(10, 0)
-    close_t = bh.close_time if bh else dt_time(20, 0)
+    open_t = special.open_time if (special and special.open_time) else (bh.open_time if bh else dt_time(10, 0))
+    close_t = special.close_time if (special and special.close_time) else (bh.close_time if bh else dt_time(20, 0))
 
     # Existing bookings on this date
     day_start = datetime.combine(date, dt_time(0, 0))
@@ -250,15 +273,25 @@ def list_slots(shop_id):
     for b in bookings:
         booked_times.add(b.booking_time.strftime("%H:%M"))
 
+    # Active slot holds by other users (public endpoint => all holds block)
+    now = datetime.utcnow()
+    active_holds = SlotHold.query.filter(
+        SlotHold.shop_id == shop.id,
+        SlotHold.slot_time >= day_start,
+        SlotHold.slot_time < day_end,
+        SlotHold.expires_at > now,
+    ).all()
+    held_times = {h.slot_time.strftime("%H:%M") for h in active_holds}
+
     # Generate 30-minute slots
     slots = []
     current = datetime.combine(date, open_t)
     end = datetime.combine(date, close_t)
-    now = datetime.utcnow()
-
     while current < end:
         time_str = current.strftime("%H:%M")
         available = time_str not in booked_times
+        if time_str in held_times:
+            available = False
         # Past slots are unavailable
         if datetime.combine(date, current.time()) < now:
             available = False
@@ -266,3 +299,63 @@ def list_slots(shop_id):
         current += timedelta(minutes=30)
 
     return jsonify(slots=slots, date=date_str, closed=False), 200
+
+
+@shops_bp.route("/<shop_id>/slots/hold", methods=["POST"])
+@login_required
+def hold_slot(shop_id):
+    shop = Shop.query.get(shop_id)
+    if not shop or not shop.is_active:
+        return jsonify(error="Shop not found"), 404
+
+    data = request.get_json() or {}
+    date_str = data.get("date")
+    time_str = data.get("time")
+    if not date_str or not time_str:
+        return jsonify(error="date and time are required"), 400
+
+    try:
+        slot_time = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        return jsonify(error="Invalid date/time format"), 400
+
+    if slot_time <= datetime.utcnow():
+        return jsonify(error="Cannot hold past slot"), 400
+
+    existing_booking = Booking.query.filter(
+        Booking.shop_id == shop.id,
+        Booking.booking_time == slot_time,
+        Booking.status.in_(["pending", "confirmed"]),
+    ).first()
+    if existing_booking:
+        return jsonify(error="Slot already booked"), 409
+
+    # Clean up expired holds first
+    SlotHold.query.filter(SlotHold.expires_at <= datetime.utcnow()).delete()
+    db.session.flush()
+
+    hold = SlotHold.query.filter_by(shop_id=shop.id, slot_time=slot_time).first()
+    if hold and str(hold.user_id) != str(g.current_user.id) and hold.expires_at > datetime.utcnow():
+        return jsonify(error="Slot currently held"), 409
+
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
+    if hold:
+        hold.user_id = g.current_user.id
+        hold.expires_at = expires_at
+    else:
+        hold = SlotHold(
+            shop_id=shop.id,
+            user_id=g.current_user.id,
+            slot_time=slot_time,
+            expires_at=expires_at,
+        )
+        db.session.add(hold)
+    db.session.commit()
+
+    return jsonify(
+        held=True,
+        shop_id=str(shop.id),
+        date=date_str,
+        time=time_str,
+        expires_at=expires_at.isoformat(),
+    ), 200

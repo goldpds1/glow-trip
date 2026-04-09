@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app import create_app, db
-from app.models import User, Shop, Menu, Booking, Payment
+from app.models import User, Shop, Menu, Booking, Payment, BusinessHour, Favorite, Review, Notification
 
 DEFAULT_PW = bcrypt.hashpw("Glow2026!".encode(), bcrypt.gensalt()).decode()
 
@@ -16,8 +16,12 @@ app = create_app()
 
 with app.app_context():
     # 기존 데이터 초기화
+    Notification.query.delete()
+    Favorite.query.delete()
+    Review.query.delete()
     Payment.query.delete()
     Booking.query.delete()
+    BusinessHour.query.delete()
     Menu.query.delete()
     Shop.query.delete()
     User.query.delete()
@@ -85,6 +89,7 @@ with app.app_context():
         longitude=127.0276,
         phone="02-1234-5678",
         category="skincare",
+        region="seoul",
     )
     shop2 = Shop(
         owner_id=owner2.id,
@@ -95,8 +100,23 @@ with app.app_context():
         longitude=126.9236,
         phone="02-9876-5432",
         category="facial",
+        region="seoul",
     )
     db.session.add_all([shop1, shop2])
+    db.session.flush()
+
+    # --- Business Hours ---
+    from datetime import time as dt_time
+    for shop in [shop1, shop2]:
+        for dow in range(7):
+            bh = BusinessHour(
+                shop_id=shop.id,
+                day_of_week=dow,
+                open_time=dt_time(10, 0),
+                close_time=dt_time(20, 0),
+                is_closed=(dow == 6),  # Sunday closed
+            )
+            db.session.add(bh)
     db.session.flush()
 
     # --- Menus ---

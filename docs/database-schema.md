@@ -18,6 +18,11 @@ users ──< shops ──< menus
   │                   │
   └───────────────────┘ (recipient)
 
+users ──< user_devices
+users ──< slot_holds >── shops
+shops ──< special_schedules
+reviews ──< review_reports >── users(reporter)
+
 shops ──< business_hours
 
 users ──< favorites >── shops
@@ -61,11 +66,12 @@ users ──< favorites >── shops
 | longitude | Float | YES | - | Google Maps 연동 |
 | phone | String(30) | YES | - | - |
 | category | String(50) | YES | - | skincare / massage / facial / waxing / body |
+| region | String(50) | YES | - | seoul / busan / jeju ... |
 | image_url | String(500) | YES | - | 대표 이미지 |
 | is_active | Boolean | NO | `True` | 관리자 활성/비활성 |
 | created_at | DateTime(tz) | NO | now(UTC) | - |
 
-**Relationships:** owner (N:1 → users), menus (1:N), bookings (1:N), business_hours (1:N)
+**Relationships:** owner (N:1 → users), menus (1:N), bookings (1:N), business_hours (1:N), slot_holds (1:N), special_schedules (1:N)
 
 ---
 
@@ -158,11 +164,12 @@ pending ─→ authorized ─→ captured ─→ refunded
 | booking_id | UUID | NO | - | **FK** → bookings.id, **UNIQUE** |
 | rating | Integer | NO | - | 1~5 |
 | comment | Text | YES | - | - |
+| is_hidden | Boolean | NO | `False` | 신고 누적 시 숨김 |
 | created_at | DateTime(tz) | NO | now(UTC) | - |
 
 **비즈니스 규칙:** completed 상태 예약에만 작성 가능, 예약당 1개
 
-**Relationships:** user (N:1), shop (N:1), booking (1:1)
+**Relationships:** user (N:1), shop (N:1), booking (1:1), reports (1:N)
 
 ---
 
@@ -225,6 +232,81 @@ pending ─→ authorized ─→ captured ─→ refunded
 
 ---
 
+## 10. slot_holds
+
+결제 전 타임슬롯 임시 점유 (동시 예약 충돌 방지)
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | UUID | NO | uuid4() | **PK** |
+| shop_id | UUID | NO | - | **FK** → shops.id |
+| user_id | UUID | NO | - | **FK** → users.id |
+| slot_time | DateTime(tz) | NO | - | 점유 슬롯 시각 |
+| expires_at | DateTime(tz) | NO | - | 만료 시각 (기본 10분) |
+| created_at | DateTime(tz) | NO | now(UTC) | - |
+
+**Unique Constraint:** `uq_slot_hold_shop_time` (shop_id, slot_time)
+
+**Relationships:** shop (N:1), user (N:1)
+
+---
+
+## 11. special_schedules
+
+특정일 예외 영업시간/휴무
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | UUID | NO | uuid4() | **PK** |
+| shop_id | UUID | NO | - | **FK** → shops.id |
+| date | Date | NO | - | 적용 날짜 |
+| open_time | Time | YES | - | 예외 오픈 시간 |
+| close_time | Time | YES | - | 예외 마감 시간 |
+| is_closed | Boolean | NO | `False` | 해당일 휴무 여부 |
+| note | String(255) | YES | - | 메모 |
+| created_at | DateTime(tz) | NO | now(UTC) | - |
+
+**Unique Constraint:** `uq_special_schedule_shop_date` (shop_id, date)
+
+**Relationships:** shop (N:1)
+
+---
+
+## 12. review_reports
+
+리뷰 신고 이력
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | UUID | NO | uuid4() | **PK** |
+| review_id | UUID | NO | - | **FK** → reviews.id |
+| reporter_id | UUID | NO | - | **FK** → users.id |
+| reason | String(200) | NO | - | 신고 사유 |
+| status | String(20) | NO | `"open"` | open / resolved / rejected |
+| created_at | DateTime(tz) | NO | now(UTC) | - |
+
+**Unique Constraint:** `uq_review_report_once` (review_id, reporter_id)
+
+**Relationships:** review (N:1), reporter (N:1 → users)
+
+---
+
+## 13. user_devices
+
+푸시 알림 디바이스 토큰
+
+| Column | Type | Nullable | Default | Constraints |
+|--------|------|----------|---------|-------------|
+| id | UUID | NO | uuid4() | **PK** |
+| user_id | UUID | NO | - | **FK** → users.id |
+| device_token | String(300) | NO | - | **UNIQUE** |
+| platform | String(20) | NO | `"unknown"` | android / ios / web / unknown |
+| created_at | DateTime(tz) | NO | now(UTC) | - |
+
+**Relationships:** user (N:1)
+
+---
+
 ## Migration History
 
 | # | Migration ID | Description |
@@ -236,6 +318,8 @@ pending ─→ authorized ─→ captured ─→ refunded
 | 5 | `855a2844e713` | business_hours 테이블 생성 |
 | 6 | `f0b7cac65f31` | notifications 테이블 생성 |
 | 7 | `8c7e7373e48d` | favorites 테이블 생성 |
+| 8 | `cb1f6bacceae` | shops.region 컬럼 추가 |
+| 9 | `7d40f731406e` | phase19: slot_holds, special_schedules, review_reports, user_devices, reviews.is_hidden 추가 |
 
 ---
 
@@ -247,6 +331,10 @@ pending ─→ authorized ─→ captured ─→ refunded
 | UNIQUE | payments | booking_id |
 | UNIQUE | reviews | booking_id |
 | UNIQUE | business_hours | (shop_id, day_of_week) |
+| UNIQUE | slot_holds | (shop_id, slot_time) |
+| UNIQUE | special_schedules | (shop_id, date) |
+| UNIQUE | review_reports | (review_id, reporter_id) |
+| UNIQUE | user_devices | device_token |
 | FK | shops | owner_id → users.id |
 | FK | menus | shop_id → shops.id |
 | FK | bookings | user_id → users.id |
@@ -262,3 +350,9 @@ pending ─→ authorized ─→ captured ─→ refunded
 | UNIQUE | favorites | (user_id, shop_id) |
 | FK | favorites | user_id → users.id |
 | FK | favorites | shop_id → shops.id |
+| FK | slot_holds | shop_id → shops.id |
+| FK | slot_holds | user_id → users.id |
+| FK | special_schedules | shop_id → shops.id |
+| FK | review_reports | review_id → reviews.id |
+| FK | review_reports | reporter_id → users.id |
+| FK | user_devices | user_id → users.id |

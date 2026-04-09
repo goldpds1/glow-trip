@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 
 from app import db
-from app.models import Booking, Shop, Review
+from app.models import Booking, Shop, Review, ReviewReport
 from app.auth.decorators import login_required
 
 reviews_bp = Blueprint("reviews", __name__, url_prefix="/api")
@@ -65,7 +65,7 @@ def shop_reviews(shop_id):
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 20, type=int), 50)
 
-    q = Review.query.filter_by(shop_id=shop.id)
+    q = Review.query.filter_by(shop_id=shop.id, is_hidden=False)
 
     # 평균 평점
     avg_result = db.session.query(db.func.avg(Review.rating)).filter_by(shop_id=shop.id).scalar()
@@ -95,3 +95,44 @@ def shop_reviews(shop_id):
         page=pagination.page,
         pages=pagination.pages,
     ), 200
+
+
+@reviews_bp.route("/reviews/<review_id>/report", methods=["POST"])
+@login_required
+def report_review(review_id):
+    review = Review.query.get(review_id)
+    if not review:
+        return jsonify(error="Review not found"), 404
+
+    data = request.get_json() or {}
+    reason = (data.get("reason") or "").strip()
+    if not reason:
+        return jsonify(error="reason is required"), 400
+
+    existing = ReviewReport.query.filter_by(
+        review_id=review.id,
+        reporter_id=g.current_user.id,
+    ).first()
+    if existing:
+        return jsonify(error="Already reported"), 400
+
+    rr = ReviewReport(
+        review_id=review.id,
+        reporter_id=g.current_user.id,
+        reason=reason[:200],
+        status="open",
+    )
+    db.session.add(rr)
+    db.session.flush()
+
+    count = ReviewReport.query.filter_by(review_id=review.id).count()
+    if count >= 3:
+        review.is_hidden = True
+
+    db.session.commit()
+    return jsonify(
+        reported=True,
+        review_id=str(review.id),
+        report_count=count,
+        review_hidden=review.is_hidden,
+    ), 201

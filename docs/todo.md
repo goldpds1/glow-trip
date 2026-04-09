@@ -157,7 +157,29 @@
 - [x] 소셜 로그인 후 기존 이메일 계정 연결 (동일 이메일 시 병합 처리)
 - [x] 테스트 작성 (19개 — config API, Google/Apple/LINE 로그인, LINE exchange, 계정 병합)
 
-## Phase 18: 네이티브 앱 패키징 ⏳ (모든 기능 확인 후 최종 단계에서 일괄 진행)
+## Phase 17.5: 기획서 누락 기능 보완
+
+- [x] 홈 화면 지역 선택 — Shop 모델에 region 필드 + 마이그레이션, API 필터, 홈 UI (관광지 10개)
+- [x] 샵 상세 운영시간 표시 — shop detail API에 business_hours 포함, 고객 화면에 요일별 표시
+- [x] 원장님 예약 상세 모달 — 예약 클릭 시 고객정보/메뉴/요청사항 원문+번역 상세 표시
+- [x] 4개 언어 i18n 키 추가 (지역 10개 + 영업시간 + 예약 상세 = 30+ 키)
+- [x] 테스트 추가 (region 필터 + business_hours API = 2개, 총 149개 통과)
+
+## Phase 18: 고도화 기능 (예약 안정성/재방문/운영관리)
+
+- [x] 예약 변경(Reschedule) API 추가 (`POST /api/bookings/:id/reschedule`)
+- [x] 타임슬롯 임시 홀드 기능 추가 (`POST /api/shops/:id/slots/hold`, 10분 만료)
+- [x] 타임슬롯 계산 시 홀드/예외스케줄 반영 (중복예약 충돌 방지 강화)
+- [x] 캘린더 내보내기(ICS) 추가 (`GET /api/bookings/:id/ics`)
+- [x] 결제 실패 복구용 재시도 엔드포인트 추가 (`POST /api/payments/:id/retry`)
+- [x] 원장 예외 스케줄(특정일 휴무/영업시간) API 추가
+- [x] 리뷰 신고/자동숨김(신고 3회 이상) 기능 추가
+- [x] 푸시 토큰 등록/해제 API 추가 + FCM 전송 구현(stub 대체)
+- [x] 고객앱 최근 본 샵 섹션 추가 (로컬 저장 기반)
+- [x] 빠른 재예약/예약변경/캘린더 버튼 UI 추가 (내 예약 화면)
+- [x] 관련 테스트 추가 (`test_phase19_features.py`)
+
+## Phase 99: 네이티브 앱 패키징 ⏳ (모든 기능 확인 후 최종 단계에서 일괄 진행)
 
 - [ ] Android WebView 앱 빌드
 - [ ] iOS WebView 앱 빌드

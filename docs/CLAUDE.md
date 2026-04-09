@@ -10,6 +10,7 @@
 - **Auth**: PyJWT + bcrypt (Access/Refresh Token)
 - **AI Translation**: PydanticAI + Gemini Flash (`run_sync()`)
 - **Payment**: Stripe (PaymentIntent, Auth & Capture)
+- **Notification**: SendGrid (email), FCM push (`FCM_SERVER_KEY` 설정 시 활성)
 - **Frontend**: Vanilla JS SPA (프레임워크 없음)
 - **Infra**: Docker + docker-compose
 - **Ports**: API `5001` (Docker) / `5000` (로컬), DB `5433`
@@ -33,7 +34,7 @@ glow-trip/
 │   ├── app/
 │   │   ├── __init__.py        # App Factory (create_app)
 │   │   ├── config.py          # 환경변수 기반 설정
-│   │   ├── models/            # SQLAlchemy 모델 (user, shop, menu, booking, payment, review, business_hour, notification, favorite)
+│   │   ├── models/            # SQLAlchemy 모델 (user, shop, menu, booking, payment, review, business_hour, notification, favorite, slot_hold, special_schedule, review_report, user_device)
 │   │   ├── auth/              # 인증 (routes, social, jwt_utils, decorators)
 │   │   ├── api/               # 비즈니스 API (shops, bookings, owner, payments, favorites, admin)
 │   │   └── services/          # 외부 서비스 (translator, payment, email, notification, push)
@@ -52,7 +53,7 @@ glow-trip/
 ├── docker-compose.yml
 └── docs/
     ├── CLAUDE.md              # AI Agent 가이드라인 (현재 파일)
-    ├── todo.md                # 작업 목록 (Phase 1~16)
+    ├── todo.md                # 작업 목록 (Phase 1~19)
     └── worklog/               # 주차별 작업 기록
 ```
 

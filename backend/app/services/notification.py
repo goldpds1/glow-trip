@@ -7,7 +7,9 @@ from flask import render_template
 
 from app import db
 from app.models.notification import Notification
+from app.models.user_device import UserDevice
 from app.services import email as email_service
+from app.services import push as push_service
 
 logger = logging.getLogger(__name__)
 
@@ -88,36 +90,54 @@ def notify(booking, recipient, notification_type: str) -> bool:
     it logs the error and returns False.
     """
     try:
-        if not email_service.is_available():
-            logger.info("Email service unavailable, skipping %s", notification_type)
-            return False
-
         lang = recipient.language or "en"
         context = _build_context(booking, recipient)
-        html_content = render_template(f"email/{notification_type}.html", **context)
-
         subject_map = SUBJECTS.get(notification_type, {})
         subject = subject_map.get(lang, subject_map.get("en", "Glow Trip"))
+        html_content = render_template(f"email/{notification_type}.html", **context)
 
-        notif = Notification(
-            booking_id=booking.id,
-            recipient_id=recipient.id,
-            channel="email",
-            notification_type=notification_type,
-            status="pending",
-        )
-        db.session.add(notif)
-        db.session.flush()
+        email_success = False
+        if email_service.is_available():
+            email_notif = Notification(
+                booking_id=booking.id,
+                recipient_id=recipient.id,
+                channel="email",
+                notification_type=notification_type,
+                status="pending",
+            )
+            db.session.add(email_notif)
+            db.session.flush()
 
-        success = email_service.send_email(recipient.email, subject, html_content)
+            email_success = email_service.send_email(recipient.email, subject, html_content)
+            email_notif.status = "sent" if email_success else "failed"
+            if not email_success:
+                email_notif.error_message = "Email send returned failure"
+            email_notif.sent_at = datetime.now(timezone.utc) if email_success else None
 
-        notif.status = "sent" if success else "failed"
-        if not success:
-            notif.error_message = "Email send returned failure"
-        notif.sent_at = datetime.now(timezone.utc) if success else None
+        push_success = False
+        if push_service.is_available():
+            devices = UserDevice.query.filter_by(user_id=recipient.id).all()
+            for d in devices:
+                ok = push_service.send_push(
+                    device_token=d.device_token,
+                    title=subject,
+                    body=f"{booking.shop.name} · {booking.menu.title}",
+                    data={"booking_id": str(booking.id), "type": notification_type},
+                )
+                push_notif = Notification(
+                    booking_id=booking.id,
+                    recipient_id=recipient.id,
+                    channel="push",
+                    notification_type=notification_type,
+                    status="sent" if ok else "failed",
+                    sent_at=datetime.now(timezone.utc) if ok else None,
+                    error_message=None if ok else "Push send failed",
+                )
+                db.session.add(push_notif)
+                push_success = push_success or ok
+
         db.session.commit()
-
-        return success
+        return email_success or push_success
 
     except Exception:
         logger.exception("notify() failed for booking=%s type=%s", booking.id, notification_type)

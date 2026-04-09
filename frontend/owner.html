@@ -150,11 +150,20 @@
     </div>
   </div>
 
+  <!-- Booking Detail Modal -->
+  <div id="bookingModal" class="hidden" style="position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)">
+    <div style="background:var(--bg);border-radius:16px;max-width:420px;width:90%;max-height:80vh;overflow-y:auto;padding:24px;position:relative">
+      <button onclick="closeBookingModal()" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-light)">&times;</button>
+      <div id="bookingModalContent"></div>
+    </div>
+  </div>
+
   <script src="/static/js/api.js"></script>
   <script src="/static/js/lang.js"></script>
   <script>
     let ownerShops = [];
     let currentShopId = null;
+    let ownerBookingsCache = [];
 
     async function ownerLogin() {
       const email = document.getElementById('ownerEmail').value;
@@ -204,25 +213,16 @@
         return;
       }
 
+      ownerBookingsCache = data.bookings;
       container.innerHTML = data.bookings.map(b => `
-        <div class="booking-row">
+        <div class="booking-row" style="cursor:pointer" onclick="openBookingDetail('${b.id}')">
           <div class="flex" style="justify-content:space-between;align-items:center">
             <strong>${esc(b.user_name || b.user_email)}</strong>
             <span class="booking-status status-${b.status}">${b.status}</span>
           </div>
           <div class="card-sub">${esc(b.menu_title)} — ${formatPrice(b.menu_price)}</div>
           <div class="card-sub">${formatDate(b.booking_time)}</div>
-          ${b.request_original ? `
-            <div class="card-sub mt-8" style="font-style:italic">"${esc(b.request_original)}"</div>
-            ${b.request_translated ? `
-              <div class="translated-box">
-                <div class="label">${t('aiTranslation')}</div>
-                ${esc(b.request_translated)}
-              </div>
-            ` : ''}
-          ` : ''}
-          ${b.payment_status ? `<div class="card-sub" style="font-size:12px;color:var(--text-light)">${t('paymentPending')}: ${b.payment_status}</div>` : ''}
-          <div class="action-btns">
+          <div class="action-btns" onclick="event.stopPropagation()">
             ${b.status === 'pending' ? `
               <button class="btn btn-primary btn-sm" onclick="changeStatus('${b.id}','confirmed')">${t('confirm')}</button>
               <button class="btn btn-danger btn-sm" onclick="changeStatus('${b.id}','cancelled')">${t('cancelBtn')}</button>
@@ -237,6 +237,40 @@
           </div>
         </div>
       `).join('');
+    }
+
+    function openBookingDetail(id) {
+      const b = ownerBookingsCache.find(x => x.id === id);
+      if (!b) return;
+      document.getElementById('bookingModalContent').innerHTML = `
+        <h3 style="margin:0 0 16px;font-size:18px">${t('bookingDetail')}</h3>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <div><span style="font-weight:600;color:var(--text-light)">${t('customer')}</span><br>${esc(b.user_name || '')} (${esc(b.user_email)})</div>
+          <div><span style="font-weight:600;color:var(--text-light)">${t('menu')}</span><br>${esc(b.menu_title)} — ${formatPrice(b.menu_price)}</div>
+          <div><span style="font-weight:600;color:var(--text-light)">${t('bookingTime')}</span><br>${formatDate(b.booking_time)}</div>
+          <div><span style="font-weight:600;color:var(--text-light)">${t('status')}</span><br><span class="booking-status status-${b.status}">${b.status}</span></div>
+          ${b.payment_status ? `<div><span style="font-weight:600;color:var(--text-light)">${t('paymentPending')}</span><br>${b.payment_status}</div>` : ''}
+          ${b.request_original ? `
+            <div><span style="font-weight:600;color:var(--text-light)">${t('originalRequest')}</span><br><em>"${esc(b.request_original)}"</em></div>
+            ${b.request_translated ? `
+              <div class="translated-box" style="margin-top:4px">
+                <div class="label">${t('aiTranslation')}</div>
+                ${esc(b.request_translated)}
+              </div>` : ''}
+          ` : ''}
+          <div><span style="font-weight:600;color:var(--text-light)">${t('adCreated')}</span><br>${formatDate(b.created_at)}</div>
+        </div>
+        <button class="btn btn-outline" onclick="closeBookingModal()" style="margin-top:20px;width:100%">${t('close')}</button>
+      `;
+      const modal = document.getElementById('bookingModal');
+      modal.classList.remove('hidden');
+      modal.style.display = 'flex';
+    }
+
+    function closeBookingModal() {
+      const modal = document.getElementById('bookingModal');
+      modal.classList.add('hidden');
+      modal.style.display = 'none';
     }
 
     async function changeStatus(bookingId, status) {

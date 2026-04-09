@@ -16,9 +16,14 @@
 
   <!-- ══ Header ══════════════════════════════════════ -->
   <div class="header">
-    <button class="back-btn hidden" id="backBtn" onclick="goBack()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    </button>
+    <div id="headerLeft">
+      <button class="header-icon-btn" id="homeBtn" onclick="navigate('home')" title="Home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      </button>
+      <button class="header-icon-btn hidden" id="backBtn" onclick="goBack()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+    </div>
     <h1 id="headerTitle">Glow Trip</h1>
     <div id="headerRight"><div id="headerLang"></div></div>
   </div>
@@ -111,11 +116,16 @@
       <span class="search-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
       <input type="text" id="homeSearchInput" data-i18n-placeholder="searchPlaceholder" oninput="searchFromHome()">
     </div>
+    <div id="regionTags" class="category-bar" style="margin-bottom:0"></div>
     <div id="categoryTags" class="category-bar"></div>
     <div class="px-16">
       <h3 class="section-title" data-i18n="popularClinics">Popular Clinics</h3>
     </div>
     <div id="popularShopsScroll" class="horizontal-scroll"></div>
+    <div class="px-16 mt-16">
+      <h3 class="section-title" data-i18n="recentViewed">Recently Viewed</h3>
+    </div>
+    <div id="recentShopsScroll" class="horizontal-scroll"></div>
     <div class="px-16 mt-16">
       <h3 class="section-title" data-i18n="recommendedShops">Recommended</h3>
     </div>
@@ -247,15 +257,6 @@
           <div class="form-group">
             <label class="form-label" data-i18n="profilePhone"></label>
             <input type="tel" class="form-input" id="editPhone" maxlength="30">
-          </div>
-          <div class="form-group">
-            <label class="form-label" data-i18n="profileLang"></label>
-            <select class="form-input" id="editLang">
-              <option value="ko">한국어</option>
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
-              <option value="zh">中文</option>
-            </select>
           </div>
           <div style="display:flex;gap:8px;margin-top:12px">
             <button class="btn btn-primary" onclick="saveProfile()" data-i18n="profileSave"></button>

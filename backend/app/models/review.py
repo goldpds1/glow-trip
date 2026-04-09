@@ -13,6 +13,7 @@ class Review(db.Model):
     booking_id = db.Column(db.UUID, db.ForeignKey("bookings.id"), unique=True, nullable=False)
     rating = db.Column(db.Integer, nullable=False)  # 1-5
     comment = db.Column(db.Text, nullable=True)
+    is_hidden = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(
         db.DateTime(timezone=True),
         nullable=False,

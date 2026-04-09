@@ -78,6 +78,13 @@ def checkout(booking_id):
     ), 200
 
 
+@payments_bp.route("/<booking_id>/retry", methods=["POST"])
+@login_required
+def retry_checkout(booking_id):
+    """결제 재시도: failed/pending 상태를 대상으로 checkout 재호출."""
+    return checkout(booking_id)
+
+
 # ── 결제 상태 조회 (고객) ────────────────────────────────
 @payments_bp.route("/<booking_id>/status", methods=["GET"])
 @login_required

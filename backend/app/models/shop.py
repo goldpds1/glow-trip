@@ -16,6 +16,7 @@ class Shop(db.Model):
     longitude = db.Column(db.Float, nullable=True)
     phone = db.Column(db.String(30), nullable=True)
     category = db.Column(db.String(50), nullable=True)
+    region = db.Column(db.String(50), nullable=True)
     image_url = db.Column(db.String(500), nullable=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_at = db.Column(
